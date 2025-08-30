@@ -3,10 +3,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
+from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import SignupSerializer, SigninSerializer
-
-
+from .serializers import SignupSerializer, SigninSerializer, ImageSerializer
 
 class SignupView(APIView):
 	permission_classes = [AllowAny]
@@ -22,7 +22,7 @@ class SignupView(APIView):
   "username": "",
   "email": "",
   "password": "",
-  "password2": "",
+  "password2": ""
 }
 
 class SigninView(APIView):
@@ -50,3 +50,43 @@ class SigninView(APIView):
     "password": ""
 }
 
+# class PredictView(APIView):
+# 	def post(self, request, *args, **kwargs):
+# 		serializer = ImageSerializer(data=request.data)
+# 		if serializer.is_valid():
+# 			image = serializer.validated_data['image']
+# 			# preprocess + predict
+# 			return Response({"result": "prediction_here"})
+# 		return Response(serializer.errors, status=400)
+
+
+# Profile update views
+class ChangePasswordView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def post(self, request):
+		user = request.user
+		old_password = request.data.get('old_password')
+		new_password = request.data.get('new_password')
+		if not old_password or not new_password:
+			return Response({'error': 'Old and new password required.'}, status=status.HTTP_400_BAD_REQUEST)
+		if not check_password(old_password, user.password):
+			return Response({'error': 'Old password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
+		user.set_password(new_password)
+		user.save()
+		return Response({'message': 'Password updated successfully.'}, status=status.HTTP_200_OK)
+
+
+class ChangeUsernameView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def post(self, request):
+		user = request.user
+		new_username = request.data.get('new_username')
+		if not new_username:
+			return Response({'error': 'New username required.'}, status=status.HTTP_400_BAD_REQUEST)
+		if User.objects.filter(username=new_username).exclude(pk=user.pk).exists():
+			return Response({'error': 'Username already taken.'}, status=status.HTTP_400_BAD_REQUEST)
+		user.username = new_username
+		user.save()
+		return Response({'message': 'Username updated successfully.'}, status=status.HTTP_200_OK)

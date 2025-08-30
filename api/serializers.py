@@ -30,3 +30,6 @@ class SignupSerializer(serializers.ModelSerializer):
 class SigninSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField(write_only=True)
+
+class ImageSerializer(serializers.Serializer):
+    image = serializers.ImageField()
