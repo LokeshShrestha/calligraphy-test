@@ -1,3 +1,4 @@
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -7,6 +8,10 @@ from django.contrib.auth.models import User
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import SignupSerializer, SigninSerializer, ImageSerializer
+from rest_framework.parsers import MultiPartParser, FormParser
+from io import BytesIO
+from PIL import Image
+
 
 class SignupView(APIView):
 	permission_classes = [AllowAny]
@@ -50,15 +55,6 @@ class SigninView(APIView):
     "password": ""
 }
 
-# class PredictView(APIView):
-# 	def post(self, request, *args, **kwargs):
-# 		serializer = ImageSerializer(data=request.data)
-# 		if serializer.is_valid():
-# 			image = serializer.validated_data['image']
-# 			# preprocess + predict
-# 			return Response({"result": "prediction_here"})
-# 		return Response(serializer.errors, status=400)
-
 
 # Profile update views
 class ChangePasswordView(APIView):
@@ -79,7 +75,6 @@ class ChangePasswordView(APIView):
 
 class ChangeUsernameView(APIView):
 	permission_classes = [IsAuthenticated]
-
 	def post(self, request):
 		user = request.user
 		new_username = request.data.get('new_username')
@@ -90,3 +85,19 @@ class ChangeUsernameView(APIView):
 		user.username = new_username
 		user.save()
 		return Response({'message': 'Username updated successfully.'}, status=status.HTTP_200_OK)
+	
+
+class PredictView(APIView):
+	permission_classes = [AllowAny]
+	parser_classes = [MultiPartParser, FormParser]
+	def post(self, request):
+		serializer = ImageSerializer(data=request.data)
+		if serializer.is_valid():
+			image_file = serializer.validated_data['image']  
+			img = Image.open(image_file)
+			img = img.convert('L')
+			img_io = BytesIO()
+			img.save(img_io, format="PNG")
+			img_io.seek(0)
+			return HttpResponse(img_io, content_type="image/png")
+		return Response(serializer.errors, status=400)

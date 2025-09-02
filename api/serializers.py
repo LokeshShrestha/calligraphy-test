@@ -7,7 +7,7 @@ class SignupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("username", "email", "password", "password2")
+        fields = ["username", "email", "password", "password2"]
         extra_kwargs = {"password": {"write_only": True}}
 
     def validate(self, attrs):
@@ -30,6 +30,10 @@ class SignupSerializer(serializers.ModelSerializer):
 class SigninSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField(write_only=True)
+    class Meta:
+        fields = ["username", "password"]
 
 class ImageSerializer(serializers.Serializer):
     image = serializers.ImageField()
+    class Meta:
+        fields = ["image"]
