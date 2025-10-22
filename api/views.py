@@ -99,5 +99,11 @@ class PredictView(APIView):
 			img_io = BytesIO()
 			img.save(img_io, format="PNG")
 			img_io.seek(0)
+
+			# Model
+
 			return HttpResponse(img_io, content_type="image/png")
 		return Response(serializer.errors, status=400)
+
+
+
