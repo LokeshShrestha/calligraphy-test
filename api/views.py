@@ -88,7 +88,7 @@ class ChangeUsernameView(APIView):
 	
 
 class PredictView(APIView):
-	permission_classes = [AllowAny]
+	permission_classes = [IsAuthenticated]
 	parser_classes = [MultiPartParser, FormParser]
 	def post(self, request):
 		serializer = ImageSerializer(data=request.data)
