@@ -14,5 +14,5 @@ urlpatterns = [
     path('similarity/', SimilarityView.as_view(), name='similarity'),
 
     # Extra feature if you want to :) but boring thing 
-    path('gradcam/', GradCAMView.as_view(), name='gradcam'),
+    # path('gradcam/', GradCAMView.as_view(), name='gradcam'),
 ]
