@@ -7,10 +7,13 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import SignupSerializer, SigninSerializer, ImageSerializer
+from .serializers import SignupSerializer, SigninSerializer, ImageSerializer, SimilaritySerializer, GradCAMSerializer
 from rest_framework.parsers import MultiPartParser, FormParser
 from io import BytesIO
 from PIL import Image
+import tempfile
+import os
+import base64
 
 
 class SignupView(APIView):
@@ -22,7 +25,6 @@ class SignupView(APIView):
 			return Response({'message': 'User created successfully.'}, status=status.HTTP_201_CREATED)
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# Request Example
 {
   "username": "",
   "email": "",
@@ -39,7 +41,6 @@ class SigninView(APIView):
 		username = serializer.validated_data['username']
 		password = serializer.validated_data['password']
 		user = authenticate(username=username, password=password)
-		# user email and username to generate token
 		if user is not None:
 			refresh = RefreshToken.for_user(user)
 			return Response({
@@ -55,8 +56,6 @@ class SigninView(APIView):
     "password": ""
 }
 
-
-# Profile update views
 class ChangePasswordView(APIView):
 	permission_classes = [IsAuthenticated]
 
@@ -90,20 +89,148 @@ class ChangeUsernameView(APIView):
 class PredictView(APIView):
 	permission_classes = [IsAuthenticated]
 	parser_classes = [MultiPartParser, FormParser]
+	
 	def post(self, request):
 		serializer = ImageSerializer(data=request.data)
 		if serializer.is_valid():
-			image_file = serializer.validated_data['image']  
-			img = Image.open(image_file)
-			img = img.convert('L')
-			img_io = BytesIO()
-			img.save(img_io, format="PNG")
-			img_io.seek(0)
+			try:
+				from .ml_models import get_classification_model
+				import tempfile
+				import os
+				image_file = serializer.validated_data['image']
 
-			# Model
+				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+					tmp.write(image_file.read())
+					tmp_path = tmp.name
+				
+				try:
+					model = get_classification_model()
+					result = model.predict(tmp_path, top_k=5)
+					
+					return Response({
+						'success': True,
+						'predicted_class': result['class'],
+						'confidence': round(result['confidence'], 2),
+						'top_predictions': [
+							{
+								'class': int(cls),
+								'confidence': round(conf, 2)
+							}
+							for cls, conf in zip(result['top_classes'], result['top_confidences'])
+						]
+					}, status=status.HTTP_200_OK)
+				
+				finally:
+					if os.path.exists(tmp_path):
+						os.unlink(tmp_path)
+			
+			except Exception as e:
+				return Response({
+					'success': False,
+					'error': str(e)
+				}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+		
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-			return HttpResponse(img_io, content_type="image/png")
-		return Response(serializer.errors, status=400)
+
+class SimilarityView(APIView):
+	permission_classes = [IsAuthenticated]
+	parser_classes = [MultiPartParser, FormParser]
+	
+	def post(self, request):
+		serializer = SimilaritySerializer(data=request.data)
+		if serializer.is_valid():
+			try:
+				from .ml_models import get_classification_model
+				
+				image1_file = serializer.validated_data['image1']
+				image2_file = serializer.validated_data['image2']
+				
+				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp1:
+					tmp1.write(image1_file.read())
+					tmp1_path = tmp1.name
+				
+				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp2:
+					tmp2.write(image2_file.read())
+					tmp2_path = tmp2.name
+				
+				try:
+					model = get_classification_model()
+					similarity_score, distance = model.compute_similarity(tmp1_path, tmp2_path)
+					
+					threshold = 0.45
+					is_same = distance < threshold
+					
+					return Response({
+						'success': True,
+						'similarity_score': round(similarity_score, 2),
+						'distance': round(distance, 4),
+						'is_same_character': is_same,
+						'threshold': threshold
+					}, status=status.HTTP_200_OK)
+				
+				finally:
+					if os.path.exists(tmp1_path):
+						os.unlink(tmp1_path)
+					if os.path.exists(tmp2_path):
+						os.unlink(tmp2_path)
+			
+			except Exception as e:
+				return Response({
+					'success': False,
+					'error': str(e)
+				}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+		
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GradCAMView(APIView):
+	permission_classes = [IsAuthenticated]
+	parser_classes = [MultiPartParser, FormParser]
+	
+	def post(self, request):
+		serializer = GradCAMSerializer(data=request.data)
+		if serializer.is_valid():
+			try:
+				from .ml_models import get_classification_model
+				
+				image_file = serializer.validated_data['image']
+				target_class = serializer.validated_data.get('target_class', None)
+				
+				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+					tmp.write(image_file.read())
+					tmp_path = tmp.name
+				
+				gradcam_path = tmp_path.replace('.png', '_gradcam.png')
+				
+				try:
+					model = get_classification_model()
+					result = model.generate_gradcam(tmp_path, target_class=target_class, save_path=gradcam_path)
+					
+					with open(gradcam_path, 'rb') as f:
+						gradcam_base64 = base64.b64encode(f.read()).decode('utf-8')
+					
+					return Response({
+						'success': True,
+						'predicted_class': result['predicted_class'],
+						'confidence': round(result['confidence'] * 100, 2),
+						'gradcam_image': f'data:image/png;base64,{gradcam_base64}'
+					}, status=status.HTTP_200_OK)
+				
+				finally:
+					if os.path.exists(tmp_path):
+						os.unlink(tmp_path)
+					if os.path.exists(gradcam_path):
+						os.unlink(gradcam_path)
+			
+			except Exception as e:
+				return Response({
+					'success': False,
+					'error': str(e)
+				}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+		
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 

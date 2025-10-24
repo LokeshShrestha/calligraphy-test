@@ -1,0 +1,71 @@
+Models
+    1. efficientnet_b0_best.pth (47 MB)
+    Purpose: Classification Model
+
+    What it does: Identifies which of the 62 Ranjana characters the input image represents
+    Input: Single 64x64 grayscale image
+    Output: Class prediction (0-61) with confidence scores
+    Accuracy: 99.5%
+    Use case: "What character is this?"
+
+    2. siamese_efficientnet_b0_best.pth (25 MB)
+    Purpose: Similarity/Comparison Model (Siamese Network)
+
+    What it does:
+    Compares two images to see how similar they are
+    Extracts 128-dimensional feature embeddings
+    Determines if two characters are the same or different
+    Input: Two 64x64 grayscale images
+    Output:
+    Similarity score (0-100%)
+    Euclidean distance between embeddings
+    128-dimensional feature vectors
+    Accuracy: 92.7%
+    Use cases:
+    "Are these two characters the same?"
+    "How similar is the student's handwriting to the reference?"
+    "Find similar characters in a database"
+
+View 
+    PredictView = Recognition → "I see character 23"
+    SimilarityView = Comparison → "Your writing is 87% like the reference"
+    GradCAMView = Explanation → "I looked at these parts to decide"
+
+    predict view 
+        1. User uploads image → 
+        2. Validate image (via ImageSerializer) →
+        3. Save to temporary file →
+        4. Load ML model (EfficientNet-B0) →
+        5. Run prediction →
+        6. Return class ID + confidence →
+        7. Delete temp file
+
+    Similarity view
+        1. User uploads 2 images →
+        2. Validate both images (via SimilaritySerializer) →
+        3. Save both to temp files →
+        4. Load Siamese neural network →
+        5. Extract 128D embeddings for each image →
+        6. Calculate distance between embeddings →
+        7. Convert distance to similarity % →
+        8. Check if same character (distance < 0.45) →
+        9. Return results →
+        10. Delete temp files
+        
+    Grad cam view
+        1. User uploads image (+ optional target_class) →
+        2. Validate input (via GradCAMSerializer) →
+        3. Save to temp file →
+        4. Load model →
+        5. Run prediction (get class) →
+        6. Generate Grad-CAM heatmap →
+        7. Overlay heatmap on original image →
+        8. Convert to base64 (for web display) →
+        9. Return prediction + heatmap →
+        10. Delete temp files 
+
+
+
+Predict View -> Recognizes character
+SimilarityView -> Compare with reference image gives similarity score
+GradCAMView -> shows why model made the prediction Heatmap basically (no need to include)
