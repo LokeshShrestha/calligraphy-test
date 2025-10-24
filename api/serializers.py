@@ -40,10 +40,10 @@ class ImageSerializer(serializers.Serializer):
 
 
 class SimilaritySerializer(serializers.Serializer):
-    image1 = serializers.ImageField()
-    image2 = serializers.ImageField()
+    image = serializers.ImageField()
+    target_class = serializers.IntegerField(min_value=0, max_value=61)
     class Meta:
-        fields = ["image1", "image2"]
+        fields = ["image", "target_class"]
 
 
 class GradCAMSerializer(serializers.Serializer):

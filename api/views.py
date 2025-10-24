@@ -10,10 +10,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import SignupSerializer, SigninSerializer, ImageSerializer, SimilaritySerializer, GradCAMSerializer
 from rest_framework.parsers import MultiPartParser, FormParser
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ImageOps
 import tempfile
 import os
 import base64
+import numpy as np
 
 
 class SignupView(APIView):
@@ -105,19 +106,12 @@ class PredictView(APIView):
 				
 				try:
 					model = get_classification_model()
-					result = model.predict(tmp_path, top_k=5)
+					result = model.predict(tmp_path, top_k=1)
 					
 					return Response({
 						'success': True,
 						'predicted_class': result['class'],
-						'confidence': round(result['confidence'], 2),
-						'top_predictions': [
-							{
-								'class': int(cls),
-								'confidence': round(conf, 2)
-							}
-							for cls, conf in zip(result['top_classes'], result['top_confidences'])
-						]
+						'confidence': round(result['confidence'], 2)
 					}, status=status.HTTP_200_OK)
 				
 				finally:
@@ -137,91 +131,98 @@ class SimilarityView(APIView):
 	permission_classes = [IsAuthenticated]
 	parser_classes = [MultiPartParser, FormParser]
 	
+	def _create_comparison_overlay(self, user_image_path, reference_image_path):
+		# Load images and convert to grayscale
+		user_img = Image.open(user_image_path).convert('L')
+		ref_img = Image.open(reference_image_path).convert('L')
+		
+		# Resize to same dimensions (larger for better visibility)
+		target_size = (256, 256)
+		user_img = user_img.resize(target_size, Image.Resampling.LANCZOS)
+		ref_img = ref_img.resize(target_size, Image.Resampling.LANCZOS)
+		
+		# Convert to numpy arrays
+		user_array = np.array(user_img)
+		ref_array = np.array(ref_img)
+		
+		# Invert so that strokes are white (255) and background is black (0)
+		user_array = 255 - user_array
+		ref_array = 255 - ref_array
+		
+		# Normalize to 0-1 range
+		user_norm = user_array.astype(float) / 255.0
+		ref_norm = ref_array.astype(float) / 255.0
+		
+		height, width = user_array.shape
+		overlay = np.zeros((height, width, 3), dtype=np.uint8)
+		
+		overlay[:, :, 0] = (ref_norm * 255).astype(np.uint8)
+		
+		overlay[:, :, 1] = (user_norm * 255).astype(np.uint8)
+		
+		# Where both overlap, it becomes YELLOW (R+G)
+		# Where only reference: RED
+		# Where only user: GREEN
+		# Background: BLACK
+		
+		comparison_image = Image.fromarray(overlay, 'RGB')
+		
+		return comparison_image
+	
 	def post(self, request):
 		serializer = SimilaritySerializer(data=request.data)
 		if serializer.is_valid():
 			try:
 				from .ml_models import get_classification_model
+				from django.conf import settings
 				
-				image1_file = serializer.validated_data['image1']
-				image2_file = serializer.validated_data['image2']
+				image_file = serializer.validated_data['image']
+				target_class = serializer.validated_data['target_class']
 				
-				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp1:
-					tmp1.write(image1_file.read())
-					tmp1_path = tmp1.name
+				# Path to reference image for the predicted class
+				reference_images_dir = os.path.join(settings.BASE_DIR, 'api', 'reference_images')
+				reference_image_path = os.path.join(reference_images_dir, f'class_{target_class}.png')
 				
-				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp2:
-					tmp2.write(image2_file.read())
-					tmp2_path = tmp2.name
+				# Check if reference image exists
+				if not os.path.exists(reference_image_path):
+					return Response({
+						'success': False,
+						'error': f'Reference image for class {target_class} not found. Please upload reference images.'
+					}, status=status.HTTP_404_NOT_FOUND)
+				
+				# Save user's uploaded image temporarily
+				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+					tmp.write(image_file.read())
+					tmp_path = tmp.name
 				
 				try:
 					model = get_classification_model()
-					similarity_score, distance = model.compute_similarity(tmp1_path, tmp2_path)
+					similarity_score, distance = model.compute_similarity(tmp_path, reference_image_path)
 					
 					threshold = 0.45
 					is_same = distance < threshold
+					
+					# Generate comparison visualization
+					comparison_image = self._create_comparison_overlay(tmp_path, reference_image_path)
+					
+					# Convert to base64
+					buffered = BytesIO()
+					comparison_image.save(buffered, format="PNG")
+					comparison_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
 					
 					return Response({
 						'success': True,
 						'similarity_score': round(similarity_score, 2),
 						'distance': round(distance, 4),
 						'is_same_character': is_same,
-						'threshold': threshold
-					}, status=status.HTTP_200_OK)
-				
-				finally:
-					if os.path.exists(tmp1_path):
-						os.unlink(tmp1_path)
-					if os.path.exists(tmp2_path):
-						os.unlink(tmp2_path)
-			
-			except Exception as e:
-				return Response({
-					'success': False,
-					'error': str(e)
-				}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-		
-		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class GradCAMView(APIView):
-	permission_classes = [IsAuthenticated]
-	parser_classes = [MultiPartParser, FormParser]
-	
-	def post(self, request):
-		serializer = GradCAMSerializer(data=request.data)
-		if serializer.is_valid():
-			try:
-				from .ml_models import get_classification_model
-				
-				image_file = serializer.validated_data['image']
-				target_class = serializer.validated_data.get('target_class', None)
-				
-				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-					tmp.write(image_file.read())
-					tmp_path = tmp.name
-				
-				gradcam_path = tmp_path.replace('.png', '_gradcam.png')
-				
-				try:
-					model = get_classification_model()
-					result = model.generate_gradcam(tmp_path, target_class=target_class, save_path=gradcam_path)
-					
-					with open(gradcam_path, 'rb') as f:
-						gradcam_base64 = base64.b64encode(f.read()).decode('utf-8')
-					
-					return Response({
-						'success': True,
-						'predicted_class': result['predicted_class'],
-						'confidence': round(result['confidence'] * 100, 2),
-						'gradcam_image': f'data:image/png;base64,{gradcam_base64}'
+						'threshold': threshold,
+						'compared_with_class': target_class,
+						'comparison_image': f'data:image/png;base64,{comparison_base64}'
 					}, status=status.HTTP_200_OK)
 				
 				finally:
 					if os.path.exists(tmp_path):
 						os.unlink(tmp_path)
-					if os.path.exists(gradcam_path):
-						os.unlink(gradcam_path)
 			
 			except Exception as e:
 				return Response({
@@ -230,6 +231,54 @@ class GradCAMView(APIView):
 				}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 		
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# class GradCAMView(APIView):
+# 	permission_classes = [IsAuthenticated]
+# 	parser_classes = [MultiPartParser, FormParser]
+	
+# 	def post(self, request):
+# 		serializer = GradCAMSerializer(data=request.data)
+# 		if serializer.is_valid():
+# 			try:
+# 				from .ml_models import get_classification_model
+				
+# 				image_file = serializer.validated_data['image']
+# 				target_class = serializer.validated_data.get('target_class', None)
+				
+# 				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+# 					tmp.write(image_file.read())
+# 					tmp_path = tmp.name
+				
+# 				gradcam_path = tmp_path.replace('.png', '_gradcam.png')
+				
+# 				try:
+# 					model = get_classification_model()
+# 					result = model.generate_gradcam(tmp_path, target_class=target_class, save_path=gradcam_path)
+					
+# 					with open(gradcam_path, 'rb') as f:
+# 						gradcam_base64 = base64.b64encode(f.read()).decode('utf-8')
+					
+# 					return Response({
+# 						'success': True,
+# 						'predicted_class': result['predicted_class'],
+# 						'confidence': round(result['confidence'] * 100, 2),
+# 						'gradcam_image': f'data:image/png;base64,{gradcam_base64}'
+# 					}, status=status.HTTP_200_OK)
+				
+# 				finally:
+# 					if os.path.exists(tmp_path):
+# 						os.unlink(tmp_path)
+# 					if os.path.exists(gradcam_path):
+# 						os.unlink(gradcam_path)
+			
+# 			except Exception as e:
+# 				return Response({
+# 					'success': False,
+# 					'error': str(e)
+# 				}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+		
+# 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 

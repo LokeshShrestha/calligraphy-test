@@ -69,3 +69,4 @@ View
 Predict View -> Recognizes character
 SimilarityView -> Compare with reference image gives similarity score
 GradCAMView -> shows why model made the prediction Heatmap basically (no need to include)
+
