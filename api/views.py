@@ -90,7 +90,7 @@ class ChangeUsernameView(APIView):
 	
 
 class PredictView(APIView):
-	permission_classes = [IsAuthenticated]
+	permission_classes = [AllowAny]
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def post(self, request):
@@ -110,17 +110,17 @@ class PredictView(APIView):
 					model = get_classification_model()
 					result = model.predict(tmp_path, top_k=1)
 					
-					# Save to database
-					prediction = PredictionHistory.objects.create(
-						user=request.user,
-						image=image_file,
-						predicted_class=result['class'],
-						confidence=result['confidence']
-					)
+					# # Save to database
+					# prediction = PredictionHistory.objects.create(
+					# 	user=request.user,
+					# 	image=image_file,
+					# 	predicted_class=result['class'],
+					# 	confidence=result['confidence']
+					# )
 					
 					return Response({
 						'success': True,
-						'prediction_id': prediction.id,
+						# 'prediction_id': prediction.id,
 						'predicted_class': result['class'],
 						'confidence': round(result['confidence'], 2)
 					}, status=status.HTTP_200_OK)
@@ -139,7 +139,7 @@ class PredictView(APIView):
 
 
 class SimilarityView(APIView):
-	permission_classes = [IsAuthenticated]
+	permission_classes = [AllowAny]
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def _create_comparison_overlay(self, user_image_path, reference_image_path):
@@ -221,23 +221,23 @@ class SimilarityView(APIView):
 					comparison_image.save(buffered, format="PNG")
 					comparison_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
 					
-					# Save comparison image to file for database
-					comparison_file = ContentFile(buffered.getvalue(), name=f'comparison_{target_class}.png')
+					# # Save comparison image to file for database
+					# comparison_file = ContentFile(buffered.getvalue(), name=f'comparison_{target_class}.png')
 					
-					# Save to database
-					similarity_history = SimilarityHistory.objects.create(
-						user=request.user,
-						user_image=image_file,
-						target_class=target_class,
-						similarity_score=similarity_score,
-						distance=distance,
-						is_same_character=is_same,
-						comparison_image=comparison_file
-					)
+					# # Save to database
+					# similarity_history = SimilarityHistory.objects.create(
+					# 	user=request.user,
+					# 	user_image=image_file,
+					# 	target_class=target_class,
+					# 	similarity_score=similarity_score,
+					# 	distance=distance,
+					# 	is_same_character=is_same,
+					# 	comparison_image=comparison_file
+					# )
 					
 					return Response({
 						'success': True,
-						'history_id': similarity_history.id,
+						# 'history_id': similarity_history.id,
 						'similarity_score': round(similarity_score, 2),
 						'distance': round(distance, 4),
 						'is_same_character': is_same,
@@ -260,53 +260,53 @@ class SimilarityView(APIView):
 
 
 
-class PredictionHistoryView(APIView):
-	"""Get user's prediction history"""
-	permission_classes = [IsAuthenticated]
+# class PredictionHistoryView(APIView):
+# 	"""Get user's prediction history"""
+# 	permission_classes = [IsAuthenticated]
 	
-	def get(self, request):
-		"""Get all predictions for the current user"""
-		predictions = PredictionHistory.objects.filter(user=request.user)
+# 	def get(self, request):
+# 		"""Get all predictions for the current user"""
+# 		predictions = PredictionHistory.objects.filter(user=request.user)
 		
-		data = [{
-			'id': pred.id,
-			'image_url': request.build_absolute_uri(pred.image.url) if pred.image else None,
-			'predicted_class': pred.predicted_class,
-			'confidence': round(pred.confidence, 2),
-			'created_at': pred.created_at.isoformat()
-		} for pred in predictions]
+# 		data = [{
+# 			'id': pred.id,
+# 			'image_url': request.build_absolute_uri(pred.image.url) if pred.image else None,
+# 			'predicted_class': pred.predicted_class,
+# 			'confidence': round(pred.confidence, 2),
+# 			'created_at': pred.created_at.isoformat()
+# 		} for pred in predictions]
 		
-		return Response({
-			'success': True,
-			'count': len(data),
-			'predictions': data
-		}, status=status.HTTP_200_OK)
+# 		return Response({
+# 			'success': True,
+# 			'count': len(data),
+# 			'predictions': data
+# 		}, status=status.HTTP_200_OK)
 
 
-class SimilarityHistoryView(APIView):
-	"""Get user's similarity comparison history"""
-	permission_classes = [IsAuthenticated]
+# class SimilarityHistoryView(APIView):
+# 	"""Get user's similarity comparison history"""
+# 	permission_classes = [IsAuthenticated]
 	
-	def get(self, request):
-		"""Get all similarity comparisons for the current user"""
-		similarities = SimilarityHistory.objects.filter(user=request.user)
+# 	def get(self, request):
+# 		"""Get all similarity comparisons for the current user"""
+# 		similarities = SimilarityHistory.objects.filter(user=request.user)
 		
-		data = [{
-			'id': sim.id,
-			'user_image_url': request.build_absolute_uri(sim.user_image.url) if sim.user_image else None,
-			'comparison_image_url': request.build_absolute_uri(sim.comparison_image.url) if sim.comparison_image else None,
-			'target_class': sim.target_class,
-			'similarity_score': round(sim.similarity_score, 2),
-			'distance': round(sim.distance, 4),
-			'is_same_character': sim.is_same_character,
-			'created_at': sim.created_at.isoformat()
-		} for sim in similarities]
+# 		data = [{
+# 			'id': sim.id,
+# 			'user_image_url': request.build_absolute_uri(sim.user_image.url) if sim.user_image else None,
+# 			'comparison_image_url': request.build_absolute_uri(sim.comparison_image.url) if sim.comparison_image else None,
+# 			'target_class': sim.target_class,
+# 			'similarity_score': round(sim.similarity_score, 2),
+# 			'distance': round(sim.distance, 4),
+# 			'is_same_character': sim.is_same_character,
+# 			'created_at': sim.created_at.isoformat()
+# 		} for sim in similarities]
 		
-		return Response({
-			'success': True,
-			'count': len(data),
-			'similarities': data
-		}, status=status.HTTP_200_OK)
+# 		return Response({
+# 			'success': True,
+# 			'count': len(data),
+# 			'similarities': data
+# 		}, status=status.HTTP_200_OK)
 	
 	
 # class GradCAMView(APIView):
