@@ -1,36 +1,91 @@
 # Ranjana Calligraphy Recognition API
 
-A Django REST API backend for a mobile calligraphy learning application that recognizes and analyzes Ranjana script characters using deep learning. This API provides character recognition, handwriting similarity comparison, and visual feedback features to help users learn and practice Ranjana calligraphy.
+A Django REST API backend for a mobile calligraphy learning application that recognizes and analyzes Ranjana script characters using deep learning. This API provides character recognition, handwriting similarity comparison, user authentication, and learning progress tracking to help users master Ranjana calligraphy.
+
+## 📋 Quick Reference
+
+| Feature | Endpoint | Model | Accuracy |
+|---------|----------|-------|----------|
+| **Character Recognition** | `POST /api/predict/` | EfficientNet-B0 (47MB) | 99.5% |
+| **Similarity Comparison** | `POST /api/similarity/` | Siamese Network (25MB) | 92.7% |
+| **User Signup** | `POST /api/signup/` | - | - |
+| **User Signin** | `POST /api/signin/` | JWT Auth | - |
+| **Prediction History** | `GET /api/history/predictions/` | - | - |
+| **Similarity History** | `GET /api/history/similarities/` | - | - |
+
+**Authentication:** JWT Bearer Token required for ML and history endpoints
 
 ## 🎯 Overview
 
 This backend supports a mobile app that helps users learn Ranjana script (an ancient Nepali script) by:
-- **Recognizing** handwritten characters using AI
-- **Comparing** user's handwriting with reference samples
-- **Providing visual feedback** through color-coded overlays
+- **Recognizing** handwritten characters using AI (99.5% accuracy)
+- **Comparing** user's handwriting with reference samples (92.7% accuracy)
+- **Providing visual feedback** through color-coded comparison overlays
+- **Authentication & User Management** with JWT-based security
+- **History Tracking** of predictions and similarity comparisons
+
+## ✨ Key Capabilities
+
+### API View Functions
+
+1. **PredictView** (Recognition) → *"I see character 23"*
+   - Identifies which Ranjana character is written
+   - Uses EfficientNet-B0 classification model
+   - Returns class ID and confidence score
+
+2. **SimilarityView** (Comparison) → *"Your writing is 87% like the reference"*
+   - Compares user's handwriting with reference character
+   - Uses Siamese neural network for similarity scoring
+   - Generates color-coded overlay visualization
+
+3. **Authentication Views**
+   - SignupView, SigninView (JWT-based)
+   - ChangePasswordView, ChangeUsernameView
+
+4. **History Views**
+   - PredictionHistoryView, SimilarityHistoryView
+   - Track user's learning progress over time
 
 ## 🚀 Features
 
-### 1. Character Recognition
+### 1. User Authentication & Management
+- **JWT-based authentication** for secure API access
+- **User signup/signin** with token-based sessions
+- **Password management** with secure password change
+- **Username updates** for user customization
+- **Protected endpoints** requiring authentication
+
+### 2. Character Recognition (PredictView)
 - **AI-powered recognition** of 62 Ranjana characters
 - **99.5% accuracy** using EfficientNet-B0 architecture
 - Input: 64x64 grayscale images
 - Output: Character class (0-61) with confidence score
+- **Automatic history tracking** of user predictions
 
-### 2. Handwriting Similarity Analysis
+### 3. Handwriting Similarity Analysis (SimilarityView)
 - **Compare user's handwriting** with reference samples
 - **92.7% accuracy** using Siamese neural network
 - Returns similarity percentage and visual comparison
-- Color-coded overlay visualization:
-  - 🔴 **Red**: Reference character strokes
-  - 🟢 **Green**: User's strokes
-  - 🟡 **Yellow**: Matching areas (overlap)
+- **Color-coded overlay visualization**:
+  - 🔴 **Red**: Reference character strokes (areas to add)
+  - 🟢 **Green**: User's strokes (possible errors or variations)
+  - 🟡 **Yellow**: Matching areas (correct overlap)
+  - ⚫ **Black**: Background (no strokes)
+- **Distance threshold**: < 0.45 indicates same character
 
-### 3. Deep Learning Models
+### 4. Learning Progress Tracking
+- **Prediction History**: Track all character recognitions
+- **Similarity History**: Review past handwriting comparisons
+- **Timestamped records** for progress monitoring
+- **Image storage** for later review
+
+### 5. Deep Learning Models
 - **Classification Model**: `efficientnet_b0_best.pth` (47 MB)
   - Identifies which character is written
+  - Uses EfficientNet-B0 architecture
 - **Similarity Model**: `siamese_efficientnet_b0_best.pth` (25 MB)
   - Compares handwriting similarity using 128-dimensional embeddings
+  - Twin encoder architecture for robust comparison
 
 ## 📋 Prerequisites
 
@@ -107,19 +162,150 @@ The API will be available at `http://localhost:8000/`
 http://localhost:8000/api/
 ```
 
-### 1. Character Recognition
+### Authentication Endpoints
+
+#### 1. User Signup
+
+**Endpoint:** `POST /api/signup/`
+
+**Description:** Create a new user account
+
+**Request:**
+- Method: `POST`
+- Content-Type: `application/json`
+- Body:
+  ```json
+  {
+    "username": "your_username",
+    "email": "your_email@example.com",
+    "password": "your_password",
+    "password2": "your_password"
+  }
+  ```
+
+**Response:**
+```json
+{
+  "message": "User created successfully."
+}
+```
+
+---
+
+#### 2. User Signin
+
+**Endpoint:** `POST /api/signin/`
+
+**Description:** Authenticate user and receive JWT tokens
+
+**Request:**
+- Method: `POST`
+- Content-Type: `application/json`
+- Body:
+  ```json
+  {
+    "username": "your_username",
+    "password": "your_password"
+  }
+  ```
+
+**Response:**
+```json
+{
+  "refresh": "eyJ0eXAiOiJKV1QiLCJhbGc...",
+  "access": "eyJ0eXAiOiJKV1QiLCJhbGc..."
+}
+```
+
+**Note:** Use the `access` token in subsequent requests as: `Authorization: Bearer <access_token>`
+
+---
+
+#### 3. Change Password
+
+**Endpoint:** `POST /api/change-password/`
+
+**Description:** Update user's password
+
+**Authentication:** Required (Bearer Token)
+
+**Request:**
+- Method: `POST`
+- Content-Type: `application/json`
+- Headers: `Authorization: Bearer <access_token>`
+- Body:
+  ```json
+  {
+    "old_password": "current_password",
+    "new_password": "new_password"
+  }
+  ```
+
+**Response:**
+```json
+{
+  "message": "Password updated successfully."
+}
+```
+
+---
+
+#### 4. Change Username
+
+**Endpoint:** `POST /api/change-username/`
+
+**Description:** Update user's username
+
+**Authentication:** Required (Bearer Token)
+
+**Request:**
+- Method: `POST`
+- Content-Type: `application/json`
+- Headers: `Authorization: Bearer <access_token>`
+- Body:
+  ```json
+  {
+    "new_username": "new_username"
+  }
+  ```
+
+**Response:**
+```json
+{
+  "message": "Username updated successfully."
+}
+```
+
+---
+
+### Machine Learning Endpoints
+
+#### 5. Character Recognition (Predict)
 
 **Endpoint:** `POST /api/predict/`
 
-**Description:** Recognizes a Ranjana character from an uploaded image
+**Description:** Recognizes a Ranjana character from an uploaded image using EfficientNet-B0 classification model
+
+**Authentication:** Required (Bearer Token)
 
 **Request:**
 - Method: `POST`
 - Content-Type: `multipart/form-data`
+- Headers: `Authorization: Bearer <access_token>`
 - Body:
   ```
-  image: <image_file> (PNG/JPEG)
+  image: <image_file> (PNG/JPEG, 64x64 recommended)
   ```
+
+**Process Flow:**
+1. User uploads image
+2. Image validated via ImageSerializer
+3. Saved to temporary file
+4. EfficientNet-B0 model loaded
+5. Prediction executed
+6. Returns class ID + confidence
+7. History saved to database (if enabled)
+8. Temporary file deleted
 
 **Response:**
 ```json
@@ -130,33 +316,53 @@ http://localhost:8000/api/
 }
 ```
 
+**Use Case:** *"What character is this?"*
+
 **Example (cURL):**
 ```bash
 curl -X POST http://localhost:8000/api/predict/ \
+  -H "Authorization: Bearer <access_token>" \
   -F "image=@character.png"
 ```
 
 ---
 
-### 2. Handwriting Similarity Comparison
+#### 6. Handwriting Similarity Comparison
 
 **Endpoint:** `POST /api/similarity/`
 
-**Description:** Compares user's handwriting with a reference character
+**Description:** Compares user's handwriting with a reference character using Siamese neural network
+
+**Authentication:** Required (Bearer Token)
 
 **Request:**
 - Method: `POST`
 - Content-Type: `multipart/form-data`
+- Headers: `Authorization: Bearer <access_token>`
 - Body:
   ```
-  image: <image_file> (PNG/JPEG)
+  image: <image_file> (PNG/JPEG, 64x64 recommended)
   target_class: <integer> (0-61)
   ```
+
+**Process Flow:**
+1. User uploads 2 images (user image + reference from database)
+2. Both images validated via SimilaritySerializer
+3. Saved to temporary files
+4. Siamese neural network loaded
+5. Extract 128-dimensional embeddings for each image
+6. Calculate Euclidean distance between embeddings
+7. Convert distance to similarity percentage
+8. Check if same character (distance < 0.45 threshold)
+9. Generate color-coded comparison overlay
+10. Return results with base64-encoded overlay
+11. Delete temporary files
 
 **Response:**
 ```json
 {
   "success": true,
+  "history_id": 42,
   "similarity_score": 87.32,
   "distance": 0.38,
   "is_same_character": true,
@@ -168,15 +374,88 @@ curl -X POST http://localhost:8000/api/predict/ \
 
 **Interpretation:**
 - `similarity_score`: Percentage similarity (0-100%)
-- `distance`: Euclidean distance between embeddings
+- `distance`: Euclidean distance between embeddings (lower = more similar)
 - `is_same_character`: True if distance < 0.45 threshold
 - `comparison_image`: Base64-encoded overlay visualization
+  - 🔴 **Red**: Reference strokes only (areas to add)
+  - 🟢 **Green**: User's strokes only (possible errors)
+  - 🟡 **Yellow**: Matching areas (correct overlap)
+
+**Use Case:** *"How similar is the student's handwriting to the reference?"*
 
 **Example (cURL):**
 ```bash
 curl -X POST http://localhost:8000/api/similarity/ \
+  -H "Authorization: Bearer <access_token>" \
   -F "image=@user_handwriting.png" \
   -F "target_class=23"
+```
+
+---
+
+### History Endpoints
+
+#### 7. Get Prediction History
+
+**Endpoint:** `GET /api/history/predictions/`
+
+**Description:** Retrieve user's character recognition history
+
+**Authentication:** Required (Bearer Token)
+
+**Request:**
+- Method: `GET`
+- Headers: `Authorization: Bearer <access_token>`
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 15,
+  "predictions": [
+    {
+      "id": 1,
+      "image_url": "http://localhost:8000/media/predictions/image.png",
+      "predicted_class": 23,
+      "confidence": 98.5,
+      "created_at": "2025-10-26T10:30:00Z"
+    }
+  ]
+}
+```
+
+---
+
+#### 8. Get Similarity History
+
+**Endpoint:** `GET /api/history/similarities/`
+
+**Description:** Retrieve user's handwriting comparison history
+
+**Authentication:** Required (Bearer Token)
+
+**Request:**
+- Method: `GET`
+- Headers: `Authorization: Bearer <access_token>`
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 8,
+  "similarities": [
+    {
+      "id": 1,
+      "user_image_url": "http://localhost:8000/media/user_images/image.png",
+      "comparison_image_url": "http://localhost:8000/media/comparisons/overlay.png",
+      "target_class": 23,
+      "similarity_score": 87.32,
+      "distance": 0.38,
+      "is_same_character": true,
+      "created_at": "2025-10-26T11:45:00Z"
+    }
+  ]
+}
 ```
 
 ---
@@ -214,36 +493,70 @@ calligrapy/
 
 ## 🧠 Machine Learning Models
 
-### Classification Model (EfficientNet-B0)
-- **Architecture**: EfficientNet-B0 with custom classifier
-- **Input**: 64x64 grayscale image
-- **Output**: 62 class probabilities + confidence score
-- **Accuracy**: 99.5%
-- **Use Case**: "What character is this?"
+### 1. Classification Model (efficientnet_b0_best.pth - 47 MB)
 
-### Siamese Network
-- **Architecture**: Twin EfficientNet-B0 encoders
+**Purpose:** Character Recognition
+
+**What it does:** Identifies which of the 62 Ranjana characters the input image represents
+
+**Architecture:** EfficientNet-B0 with custom classifier
+
+**Specifications:**
+- **Input**: Single 64x64 grayscale image
+- **Output**: Class prediction (0-61) with confidence scores
+- **Accuracy**: 99.5%
+
+**Use Case:** *"What character is this?"*
+
+**Model View:** `PredictView` → Recognition → "I see character 23"
+
+---
+
+### 2. Siamese Network (siamese_efficientnet_b0_best.pth - 25 MB)
+
+**Purpose:** Similarity/Comparison Model
+
+**What it does:**
+- Compares two images to see how similar they are
+- Extracts 128-dimensional feature embeddings
+- Determines if two characters are the same or different
+
+**Architecture:** Twin EfficientNet-B0 encoders with embedding comparison
+
+**Specifications:**
 - **Input**: Two 64x64 grayscale images
-- **Output**: 128-dimensional embeddings + similarity score
+- **Output**: 
+  - Similarity score (0-100%)
+  - Euclidean distance between embeddings
+  - 128-dimensional feature vectors
 - **Accuracy**: 92.7%
-- **Use Cases**:
-  - Character similarity comparison
-  - Handwriting quality assessment
-  - Learning progress tracking
+- **Threshold**: Distance < 0.45 indicates same character
+
+**Use Cases:**
+- "Are these two characters the same?"
+- "How similar is the student's handwriting to the reference?"
+- "Find similar characters in a database"
+- Character similarity comparison
+- Handwriting quality assessment
+- Learning progress tracking
+
+**Model View:** `SimilarityView` → Comparison → "Your writing is 87% like the reference"
 
 ## 📦 Dependencies
 
 Key packages (see `requirements.txt` for complete list):
 
 ```
-Django==5.2+              # Web framework
-djangorestframework       # REST API toolkit
-torch>=2.0.0             # PyTorch (deep learning)
-torchvision>=0.15.0      # Vision models and transforms
-opencv-python>=4.8.0     # Image processing
-Pillow                   # Image manipulation
-numpy>=1.24.0            # Numerical computing
-psycopg                  # PostgreSQL adapter
+Django==5.2+                      # Web framework
+djangorestframework               # REST API toolkit
+djangorestframework-simplejwt     # JWT authentication
+torch>=2.0.0                      # PyTorch (deep learning)
+torchvision>=0.15.0               # Vision models and transforms
+opencv-python>=4.8.0              # Image processing
+Pillow                            # Image manipulation
+numpy>=1.24.0                     # Numerical computing
+psycopg                           # PostgreSQL adapter
+python-decouple                   # Environment variable management
 ```
 
 ## 🔧 Configuration
@@ -259,8 +572,18 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',  # Current: Open access
+        'rest_framework.permissions.IsAuthenticated',  # Secure by default
     ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+}
+
+# JWT Settings
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
 }
 
 # Database
@@ -272,13 +595,38 @@ DATABASES = {
 }
 ```
 
+### URL Configuration
+
+The API has the following endpoint structure:
+
+```python
+# api/urls.py
+urlpatterns = [
+    # Authentication
+    path('signup/', SignupView.as_view()),
+    path('signin/', SigninView.as_view()),
+    path('change-password/', ChangePasswordView.as_view()),
+    path('change-username/', ChangeUsernameView.as_view()),
+    
+    # Machine Learning
+    path('predict/', PredictView.as_view()),
+    path('similarity/', SimilarityView.as_view()),
+    
+    # History
+    path('history/predictions/', PredictionHistoryView.as_view()),
+    path('history/similarities/', SimilarityHistoryView.as_view()),
+]
+```
+
 ## 📱 Mobile App Integration
 
 ### Request Format
-All API requests should use `multipart/form-data` for image uploads:
+All API requests require JWT authentication (except signup/signin):
 
 ```javascript
 // Example: React Native / Flutter
+const accessToken = 'your_jwt_token_here';
+
 const formData = new FormData();
 formData.append('image', {
   uri: imageUri,
@@ -286,15 +634,75 @@ formData.append('image', {
   name: 'character.png'
 });
 
+// For character recognition
 fetch('http://your-server.com/api/predict/', {
   method: 'POST',
   body: formData,
   headers: {
     'Content-Type': 'multipart/form-data',
+    'Authorization': `Bearer ${accessToken}`,
   },
 })
 .then(response => response.json())
 .then(data => console.log(data));
+
+// For similarity comparison
+formData.append('target_class', '23');
+fetch('http://your-server.com/api/similarity/', {
+  method: 'POST',
+  body: formData,
+  headers: {
+    'Content-Type': 'multipart/form-data',
+    'Authorization': `Bearer ${accessToken}`,
+  },
+})
+.then(response => response.json())
+.then(data => {
+  console.log(`Similarity: ${data.similarity_score}%`);
+  // Display comparison_image (base64 encoded)
+});
+```
+
+### Authentication Flow
+
+```javascript
+// 1. User signup
+const signupData = {
+  username: 'user123',
+  email: 'user@example.com',
+  password: 'securepass',
+  password2: 'securepass'
+};
+
+fetch('http://your-server.com/api/signup/', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify(signupData)
+});
+
+// 2. User signin to get tokens
+const signinData = {
+  username: 'user123',
+  password: 'securepass'
+};
+
+fetch('http://your-server.com/api/signin/', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify(signinData)
+})
+.then(response => response.json())
+.then(data => {
+  const accessToken = data.access;
+  const refreshToken = data.refresh;
+  // Store tokens securely
+  AsyncStorage.setItem('access_token', accessToken);
+  AsyncStorage.setItem('refresh_token', refreshToken);
+});
+
+// 3. Use access token for authenticated requests
+const accessToken = await AsyncStorage.getItem('access_token');
+// Include in headers as shown above
 ```
 
 ### Image Preprocessing
@@ -323,62 +731,62 @@ Common HTTP status codes:
 
 ## 🔐 Security Notes
 
-**Current Status**: API is configured with `AllowAny` permissions for development.
+**Current Status**: 
+- API uses JWT (JSON Web Token) authentication
+- All ML endpoints require authentication (`IsAuthenticated`)
+- Auth endpoints are public (`AllowAny`)
+
+**Authentication Flow:**
+1. User signs up via `/api/signup/`
+2. User signs in via `/api/signin/` to receive JWT tokens
+3. Access token used for subsequent API calls
+4. Token included in header: `Authorization: Bearer <access_token>`
 
 **For Production**:
-1. Enable JWT authentication (already configured but commented out)
+1. ✅ JWT authentication enabled (already implemented)
 2. Add CORS middleware for mobile app origins
 3. Use HTTPS for all API calls
 4. Set `DEBUG = False` in settings
-5. Configure `ALLOWED_HOSTS`
-6. Use environment variables for secrets
-
-## 🧪 Testing
-
-Test the API using cURL, Postman, or Python:
-
-```python
-import requests
-
-# Test character recognition
-with open('test_character.png', 'rb') as img:
-    response = requests.post(
-        'http://localhost:8000/api/predict/',
-        files={'image': img}
-    )
-    print(response.json())
-
-# Test similarity comparison
-with open('user_handwriting.png', 'rb') as img:
-    response = requests.post(
-        'http://localhost:8000/api/similarity/',
-        files={'image': img},
-        data={'target_class': 23}
-    )
-    print(response.json())
-```
+5. Configure `ALLOWED_HOSTS` properly
+6. Use environment variables for all secrets
+7. Enable rate limiting for API endpoints
+8. Implement token refresh mechanism
+9. Add request validation and sanitization
+10. Configure secure media file storage
 
 ## 📊 Database Models
 
-### PredictionHistory (Currently Disabled)
+### User Model (Django's built-in)
+Django's default User model with fields:
+- `username`: Unique username
+- `email`: User's email address
+- `password`: Hashed password
+- JWT tokens generated on signin
+
+### PredictionHistory
 Stores user's character recognition history:
-- User reference
-- Uploaded image
-- Predicted class
-- Confidence score
-- Timestamp
+- **user**: Foreign key to User
+- **image**: Uploaded image file
+- **predicted_class**: Class ID (0-61) returned by model
+- **confidence**: Prediction confidence score (0-100)
+- **created_at**: Timestamp of prediction
 
-### SimilarityHistory (Currently Disabled)
+**Purpose:** Track learning progress and review past recognitions
+
+### SimilarityHistory
 Stores handwriting comparison history:
-- User reference
-- User's image
-- Target class
-- Similarity score
-- Distance metric
-- Comparison overlay image
-- Timestamp
+- **user**: Foreign key to User
+- **user_image**: User's uploaded handwriting image
+- **target_class**: Class ID of reference character
+- **similarity_score**: Similarity percentage (0-100)
+- **distance**: Euclidean distance between embeddings
+- **is_same_character**: Boolean (True if distance < 0.45)
+- **comparison_image**: Color-coded overlay visualization
+- **created_at**: Timestamp of comparison
 
-*Note: History features are commented out but can be enabled by uncommenting relevant code in `views.py` and enabling authentication.*
+**Purpose:** Track handwriting improvement and provide visual feedback history
+
+**Note:** History features are fully implemented and enabled with authentication.
 
 ## 🎨 Visual Feedback System
 
@@ -411,21 +819,46 @@ Lokesh Shrestha
 **1. "Reference image not found" error**
 - Ensure reference images are in `api/reference_images/`
 - Check filename format: `class_0.png` through `class_61.png`
+- All 62 reference images must be present
 
 **2. Database connection errors**
-- Verify PostgreSQL is running
-- Check `.env` file credentials
+- Verify PostgreSQL is running: `pg_ctl status` or check services
+- Check `.env` file credentials match your database
 - Run migrations: `python manage.py migrate`
+- Create database if it doesn't exist: `createdb your_database_name`
 
 **3. Model loading errors**
 - Ensure model weights exist in `api/ml_models/weights/`
-- Check file sizes: efficientnet (47MB), siamese (25MB)
-- Verify PyTorch is installed correctly
+- Check file sizes: efficientnet_b0_best.pth (47MB), siamese_efficientnet_b0_best.pth (25MB)
+- Verify PyTorch is installed correctly: `pip show torch`
+- Try re-downloading model weights if corrupted
 
 **4. Image processing errors**
-- Check image format (PNG/JPEG)
+- Check image format (PNG/JPEG supported)
 - Ensure image is not corrupted
 - Try reducing image size before upload
+- Recommended: 64x64 grayscale images
+
+**5. Authentication errors**
+- "Authentication credentials not provided": Include `Authorization: Bearer <token>` header
+- "Token is invalid or expired": Sign in again to get new tokens
+- "User not found": Check username/password during signin
+- JWT token lifetime: Access tokens expire after 1 hour (refresh available for 7 days)
+
+**6. Media file errors**
+- Ensure `MEDIA_ROOT` directory exists and is writable
+- Check disk space for storing uploaded images
+- Verify media URL configuration in settings
+
+**7. CORS errors (when accessing from mobile app)**
+- Install django-cors-headers: `pip install django-cors-headers`
+- Add to `INSTALLED_APPS` in settings.py
+- Configure `CORS_ALLOWED_ORIGINS` for your mobile app
+
+**8. ImportError or module not found**
+- Ensure all dependencies installed: `pip install -r requirements.txt`
+- Activate virtual environment before running
+- Check Python version compatibility (3.8+)
 
 ---
 

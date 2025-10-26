@@ -7,7 +7,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import SignupSerializer, SigninSerializer, ImageSerializer, SimilaritySerializer, GradCAMSerializer
+from .serializers import SignupSerializer, SigninSerializer, ImageSerializer, SimilaritySerializer
 from rest_framework.parsers import MultiPartParser, FormParser
 from io import BytesIO
 from PIL import Image, ImageOps
@@ -143,42 +143,46 @@ class SimilarityView(APIView):
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def _create_comparison_overlay(self, user_image_path, reference_image_path):
-		# Load images and convert to grayscale
+		"""
+		Create transparent overlay comparison:
+		- User's image: Black & white with low opacity (semi-transparent)
+		- Reference image: Full color, inverted, full opacity
+		- Overlap shows where they match
+		"""
+		# Load images
 		user_img = Image.open(user_image_path).convert('L')
 		ref_img = Image.open(reference_image_path).convert('L')
 		
-		# Resize to same dimensions (larger for better visibility)
-		target_size = (256, 256)
-		user_img = user_img.resize(target_size, Image.Resampling.LANCZOS)
-		ref_img = ref_img.resize(target_size, Image.Resampling.LANCZOS)
+		# Resize to same dimensions
+		size = (256, 256)
+		user_img = user_img.resize(size, Image.Resampling.LANCZOS)
+		ref_img = ref_img.resize(size, Image.Resampling.LANCZOS)
 		
-		# Convert to numpy arrays
-		user_array = np.array(user_img)
-		ref_array = np.array(ref_img)
+		# Invert reference image (so strokes become white on black background)
+		ref_img_inverted = ImageOps.invert(ref_img)
 		
-		# Invert so that strokes are white (255) and background is black (0)
-		user_array = 255 - user_array
-		ref_array = 255 - ref_array
+		# Create RGBA images for transparency
+		user_colored = Image.new('RGBA', size)
+		ref_colored = Image.new('RGBA', size)
 		
-		# Normalize to 0-1 range
-		user_norm = user_array.astype(float) / 255.0
-		ref_norm = ref_array.astype(float) / 255.0
+		# User's image: Black & white with low opacity (60 out of 255)
+		user_data = []
+		for pixel in user_img.getdata():
+			# Keep as grayscale but with low opacity
+			user_data.append((pixel, pixel, pixel, 100))  # Low opacity (100/255 ≈ 40%)
+		user_colored.putdata(user_data)
 		
-		height, width = user_array.shape
-		overlay = np.zeros((height, width, 3), dtype=np.uint8)
+		# Reference image: Inverted, full color (red tint), full opacity
+		ref_data = []
+		for pixel in ref_img_inverted.getdata():
+			# Red-tinted reference with full opacity
+			ref_data.append((pixel, 0, 0, 255))  # Full opacity red
+		ref_colored.putdata(ref_data)
 		
-		overlay[:, :, 0] = (ref_norm * 255).astype(np.uint8)
+		# Composite: Reference as base, user on top with transparency
+		comparison = Image.alpha_composite(ref_colored, user_colored)
 		
-		overlay[:, :, 1] = (user_norm * 255).astype(np.uint8)
-		
-		# Where both overlap, it becomes YELLOW (R+G)
-		# Where only reference: RED
-		# Where only user: GREEN
-		# Background: BLACK
-		
-		comparison_image = Image.fromarray(overlay, 'RGB')
-		
-		return comparison_image
+		return comparison.convert('RGB')
 	
 	def post(self, request):
 		serializer = SimilaritySerializer(data=request.data)
