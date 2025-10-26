@@ -19,78 +19,78 @@ from django.core.files.base import ContentFile
 from .models import PredictionHistory, SimilarityHistory
 
 
-# class SignupView(APIView):
-# 	permission_classes = [AllowAny]
-# 	def post(self, request):
-# 		serializer = SignupSerializer(data=request.data)
-# 		if serializer.is_valid():
-# 			serializer.save()
-# 			return Response({'message': 'User created successfully.'}, status=status.HTTP_201_CREATED)
-# 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class SignupView(APIView):
+	permission_classes = [AllowAny]
+	def post(self, request):
+		serializer = SignupSerializer(data=request.data)
+		if serializer.is_valid():
+			serializer.save()
+			return Response({'message': 'User created successfully.'}, status=status.HTTP_201_CREATED)
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# {
-#   "username": "",
-#   "email": "",
-#   "password": "",
-#   "password2": ""
-# }
+{
+  "username": "",
+  "email": "",
+  "password": "",
+  "password2": ""
+}
 
-# class SigninView(APIView):
-# 	permission_classes = [AllowAny]
-# 	def post(self, request):
-# 		serializer = SigninSerializer(data=request.data)
-# 		if not serializer.is_valid():
-# 			return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-# 		username = serializer.validated_data['username']
-# 		password = serializer.validated_data['password']
-# 		user = authenticate(username=username, password=password)
-# 		if user is not None:
-# 			refresh = RefreshToken.for_user(user)
-# 			return Response({
-# 				'refresh': str(refresh),
-# 				'access': str(refresh.access_token),
-# 			}, status=status.HTTP_200_OK)
-# 		return Response({'error': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
-# # Request Example
-
-
-# {
-# 	"username": "",
-#     "password": ""
-# }
-
-# class ChangePasswordView(APIView):
-# 	permission_classes = [IsAuthenticated]
-
-# 	def post(self, request):
-# 		user = request.user
-# 		old_password = request.data.get('old_password')
-# 		new_password = request.data.get('new_password')
-# 		if not old_password or not new_password:
-# 			return Response({'error': 'Old and new password required.'}, status=status.HTTP_400_BAD_REQUEST)
-# 		if not check_password(old_password, user.password):
-# 			return Response({'error': 'Old password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
-# 		user.set_password(new_password)
-# 		user.save()
-# 		return Response({'message': 'Password updated successfully.'}, status=status.HTTP_200_OK)
+class SigninView(APIView):
+	permission_classes = [AllowAny]
+	def post(self, request):
+		serializer = SigninSerializer(data=request.data)
+		if not serializer.is_valid():
+			return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+		username = serializer.validated_data['username']
+		password = serializer.validated_data['password']
+		user = authenticate(username=username, password=password)
+		if user is not None:
+			refresh = RefreshToken.for_user(user)
+			return Response({
+				'refresh': str(refresh),
+				'access': str(refresh.access_token),
+			}, status=status.HTTP_200_OK)
+		return Response({'error': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
+# Request Example
 
 
-# class ChangeUsernameView(APIView):
-# 	permission_classes = [IsAuthenticated]
-# 	def post(self, request):
-# 		user = request.user
-# 		new_username = request.data.get('new_username')
-# 		if not new_username:
-# 			return Response({'error': 'New username required.'}, status=status.HTTP_400_BAD_REQUEST)
-# 		if User.objects.filter(username=new_username).exclude(pk=user.pk).exists():
-# 			return Response({'error': 'Username already taken.'}, status=status.HTTP_400_BAD_REQUEST)
-# 		user.username = new_username
-# 		user.save()
-# 		return Response({'message': 'Username updated successfully.'}, status=status.HTTP_200_OK)
+{
+	"username": "",
+    "password": ""
+}
+
+class ChangePasswordView(APIView):
+	permission_classes = [IsAuthenticated]
+
+	def post(self, request):
+		user = request.user
+		old_password = request.data.get('old_password')
+		new_password = request.data.get('new_password')
+		if not old_password or not new_password:
+			return Response({'error': 'Old and new password required.'}, status=status.HTTP_400_BAD_REQUEST)
+		if not check_password(old_password, user.password):
+			return Response({'error': 'Old password is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
+		user.set_password(new_password)
+		user.save()
+		return Response({'message': 'Password updated successfully.'}, status=status.HTTP_200_OK)
+
+
+class ChangeUsernameView(APIView):
+	permission_classes = [IsAuthenticated]
+	def post(self, request):
+		user = request.user
+		new_username = request.data.get('new_username')
+		if not new_username:
+			return Response({'error': 'New username required.'}, status=status.HTTP_400_BAD_REQUEST)
+		if User.objects.filter(username=new_username).exclude(pk=user.pk).exists():
+			return Response({'error': 'Username already taken.'}, status=status.HTTP_400_BAD_REQUEST)
+		user.username = new_username
+		user.save()
+		return Response({'message': 'Username updated successfully.'}, status=status.HTTP_200_OK)
 	
 
 class PredictView(APIView):
-	permission_classes = [AllowAny]
+	permission_classes = [IsAuthenticated]
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def post(self, request):
@@ -110,13 +110,13 @@ class PredictView(APIView):
 					model = get_classification_model()
 					result = model.predict(tmp_path, top_k=1)
 					
-					# # Save to database
-					# prediction = PredictionHistory.objects.create(
-					# 	user=request.user,
-					# 	image=image_file,
-					# 	predicted_class=result['class'],
-					# 	confidence=result['confidence']
-					# )
+					# Save to database
+					prediction = PredictionHistory.objects.create(
+						user=request.user,
+						image=image_file,
+						predicted_class=result['class'],
+						confidence=result['confidence']
+					)
 					
 					return Response({
 						'success': True,
@@ -139,7 +139,7 @@ class PredictView(APIView):
 
 
 class SimilarityView(APIView):
-	permission_classes = [AllowAny]
+	permission_classes = [IsAuthenticated]
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def _create_comparison_overlay(self, user_image_path, reference_image_path):
@@ -221,23 +221,23 @@ class SimilarityView(APIView):
 					comparison_image.save(buffered, format="PNG")
 					comparison_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
 					
-					# # Save comparison image to file for database
-					# comparison_file = ContentFile(buffered.getvalue(), name=f'comparison_{target_class}.png')
+					# Save comparison image to file for database
+					comparison_file = ContentFile(buffered.getvalue(), name=f'comparison_{target_class}.png')
 					
-					# # Save to database
-					# similarity_history = SimilarityHistory.objects.create(
-					# 	user=request.user,
-					# 	user_image=image_file,
-					# 	target_class=target_class,
-					# 	similarity_score=similarity_score,
-					# 	distance=distance,
-					# 	is_same_character=is_same,
-					# 	comparison_image=comparison_file
-					# )
+					# Save to database
+					similarity_history = SimilarityHistory.objects.create(
+						user=request.user,
+						user_image=image_file,
+						target_class=target_class,
+						similarity_score=similarity_score,
+						distance=distance,
+						is_same_character=is_same,
+						comparison_image=comparison_file
+					)
 					
 					return Response({
 						'success': True,
-						# 'history_id': similarity_history.id,
+						'history_id': similarity_history.id, # comment if no history
 						'similarity_score': round(similarity_score, 2),
 						'distance': round(distance, 4),
 						'is_same_character': is_same,
@@ -260,53 +260,53 @@ class SimilarityView(APIView):
 
 
 
-# class PredictionHistoryView(APIView):
-# 	"""Get user's prediction history"""
-# 	permission_classes = [IsAuthenticated]
+class PredictionHistoryView(APIView):
+	"""Get user's prediction history"""
+	permission_classes = [IsAuthenticated]
 	
-# 	def get(self, request):
-# 		"""Get all predictions for the current user"""
-# 		predictions = PredictionHistory.objects.filter(user=request.user)
+	def get(self, request):
+		"""Get all predictions for the current user"""
+		predictions = PredictionHistory.objects.filter(user=request.user)
 		
-# 		data = [{
-# 			'id': pred.id,
-# 			'image_url': request.build_absolute_uri(pred.image.url) if pred.image else None,
-# 			'predicted_class': pred.predicted_class,
-# 			'confidence': round(pred.confidence, 2),
-# 			'created_at': pred.created_at.isoformat()
-# 		} for pred in predictions]
+		data = [{
+			'id': pred.id,
+			'image_url': request.build_absolute_uri(pred.image.url) if pred.image else None,
+			'predicted_class': pred.predicted_class,
+			'confidence': round(pred.confidence, 2),
+			'created_at': pred.created_at.isoformat()
+		} for pred in predictions]
 		
-# 		return Response({
-# 			'success': True,
-# 			'count': len(data),
-# 			'predictions': data
-# 		}, status=status.HTTP_200_OK)
+		return Response({
+			'success': True,
+			'count': len(data),
+			'predictions': data
+		}, status=status.HTTP_200_OK)
 
 
-# class SimilarityHistoryView(APIView):
-# 	"""Get user's similarity comparison history"""
-# 	permission_classes = [IsAuthenticated]
+class SimilarityHistoryView(APIView):
+	"""Get user's similarity comparison history"""
+	permission_classes = [IsAuthenticated]
 	
-# 	def get(self, request):
-# 		"""Get all similarity comparisons for the current user"""
-# 		similarities = SimilarityHistory.objects.filter(user=request.user)
+	def get(self, request):
+		"""Get all similarity comparisons for the current user"""
+		similarities = SimilarityHistory.objects.filter(user=request.user)
 		
-# 		data = [{
-# 			'id': sim.id,
-# 			'user_image_url': request.build_absolute_uri(sim.user_image.url) if sim.user_image else None,
-# 			'comparison_image_url': request.build_absolute_uri(sim.comparison_image.url) if sim.comparison_image else None,
-# 			'target_class': sim.target_class,
-# 			'similarity_score': round(sim.similarity_score, 2),
-# 			'distance': round(sim.distance, 4),
-# 			'is_same_character': sim.is_same_character,
-# 			'created_at': sim.created_at.isoformat()
-# 		} for sim in similarities]
+		data = [{
+			'id': sim.id,
+			'user_image_url': request.build_absolute_uri(sim.user_image.url) if sim.user_image else None,
+			'comparison_image_url': request.build_absolute_uri(sim.comparison_image.url) if sim.comparison_image else None,
+			'target_class': sim.target_class,
+			'similarity_score': round(sim.similarity_score, 2),
+			'distance': round(sim.distance, 4),
+			'is_same_character': sim.is_same_character,
+			'created_at': sim.created_at.isoformat()
+		} for sim in similarities]
 		
-# 		return Response({
-# 			'success': True,
-# 			'count': len(data),
-# 			'similarities': data
-# 		}, status=status.HTTP_200_OK)
+		return Response({
+			'success': True,
+			'count': len(data),
+			'similarities': data
+		}, status=status.HTTP_200_OK)
 	
 	
 # class GradCAMView(APIView):
