@@ -29,12 +29,7 @@ class SignupView(APIView):
 			return Response({'message': 'User created successfully.'}, status=status.HTTP_201_CREATED)
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-{
-  "username": "",
-  "email": "",
-  "password": "",
-  "password2": ""
-}
+
 
 class SigninView(APIView):
 	permission_classes = [AllowAny]
@@ -52,13 +47,6 @@ class SigninView(APIView):
 				'access': str(refresh.access_token),
 			}, status=status.HTTP_200_OK)
 		return Response({'error': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
-# Request Example
-
-
-{
-	"username": "",
-    "password": ""
-}
 
 class ChangePasswordView(APIView):
 	permission_classes = [IsAuthenticated]
@@ -112,7 +100,6 @@ class PredictView(APIView):
 					
 					predicted_class = result['class']
 					
-					# Validate predicted class is within range (0-35 for augmented model)
 					if predicted_class < 0 or predicted_class > 35:
 						return Response({
 							'success': False,
@@ -153,30 +140,21 @@ class SimilarityView(APIView):
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def _create_comparison_overlay(self, user_image_path, reference_image_path):
-		"""
-		Alpha blending comparison: Reference (high opacity) + User input (low opacity)
-		Returns tuple of (reference_image, user_image, blended_overlay)
-		"""
 		# Load images
 		user_img = Image.open(user_image_path).convert('L')
 		ref_img = Image.open(reference_image_path).convert('L')
-		
 		# Resize to same dimensions
 		size = (256, 256)
 		user_img = user_img.resize(size, Image.Resampling.LANCZOS)
 		ref_img = ref_img.resize(size, Image.Resampling.LANCZOS)
-		
 		# Convert to RGB for output
 		ref_output = ref_img.convert('RGB')
 		user_output = user_img.convert('RGB')
-		
 		# Convert to RGBA for alpha blending
 		ref_rgba = ref_img.convert('RGBA')
 		user_rgba = user_img.convert('RGBA')
-		
 		# Create a white background
 		blended = Image.new('RGBA', size, (255, 255, 255, 255))
-		
 		# Apply reference image with high opacity (80%)
 		ref_with_alpha = Image.new('RGBA', size, (255, 255, 255, 0))
 		ref_with_alpha.paste(ref_rgba, (0, 0))
@@ -184,10 +162,8 @@ class SimilarityView(APIView):
 		ref_array = np.array(ref_with_alpha)
 		ref_array[:, :, 3] = (255 - ref_array[:, :, 0]) * 0.8  # 80% opacity on strokes
 		ref_with_alpha = Image.fromarray(ref_array.astype('uint8'), 'RGBA')
-		
 		# Blend reference onto background
 		blended = Image.alpha_composite(blended, ref_with_alpha)
-		
 		# Apply user image with low opacity (30%)
 		user_with_alpha = Image.new('RGBA', size, (255, 255, 255, 0))
 		user_with_alpha.paste(user_rgba, (0, 0))
@@ -195,13 +171,10 @@ class SimilarityView(APIView):
 		user_array = np.array(user_with_alpha)
 		user_array[:, :, 3] = (255 - user_array[:, :, 0]) * 0.3  # 30% opacity on strokes
 		user_with_alpha = Image.fromarray(user_array.astype('uint8'), 'RGBA')
-		
 		# Blend user input on top
 		blended = Image.alpha_composite(blended, user_with_alpha)
-		
 		# Convert back to RGB for display
 		blended_output = blended.convert('RGB')
-		
 		# Return all three images as tuple
 		return ref_output, user_output, blended_output
 	
@@ -243,22 +216,18 @@ class SimilarityView(APIView):
 					
 					# Get all three images: reference, user, and blended overlay
 					ref_img, user_img, blended_img = self._create_comparison_overlay(tmp_path, reference_image_path)
-					
 					# Convert reference image to base64
 					ref_buffered = BytesIO()
 					ref_img.save(ref_buffered, format="PNG")
 					ref_base64 = base64.b64encode(ref_buffered.getvalue()).decode('utf-8')
-					
 					# Convert user image to base64
 					user_buffered = BytesIO()
 					user_img.save(user_buffered, format="PNG")
 					user_base64 = base64.b64encode(user_buffered.getvalue()).decode('utf-8')
-					
 					# Convert blended overlay to base64
 					blended_buffered = BytesIO()
 					blended_img.save(blended_buffered, format="PNG")
 					blended_base64 = base64.b64encode(blended_buffered.getvalue()).decode('utf-8')
-					
 					# Create ContentFile objects for saving
 					user_file = ContentFile(user_buffered.getvalue(), name=f'user_{target_class}.png')
 					ref_file = ContentFile(ref_buffered.getvalue(), name=f'ref_{target_class}.png')
