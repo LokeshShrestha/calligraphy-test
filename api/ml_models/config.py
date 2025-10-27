@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).parent
 MODELS_DIR = BASE_DIR / 'weights'
 
 # Model parameters
-NUM_CLASSES = 62
+NUM_CLASSES = 36  # Updated to 36 classes for augmented model
 IMAGE_SIZE = (64, 64)
 NUM_CHANNELS = 1  # Grayscale
 

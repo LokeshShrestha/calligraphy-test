@@ -98,7 +98,7 @@ class RanjanaInference:
         
         Returns:
             dict: {
-                'class': int (predicted class 0-61),
+                'class': int (predicted class 0-35),
                 'confidence': float (percentage),
                 'top_classes': list[int],
                 'top_confidences': list[float]

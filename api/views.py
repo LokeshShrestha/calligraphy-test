@@ -18,6 +18,7 @@ import numpy as np
 from django.core.files.base import ContentFile
 from .models import PredictionHistory, SimilarityHistory
 
+from .ml_models import get_classification_model
 
 class SignupView(APIView):
 	permission_classes = [AllowAny]
@@ -90,7 +91,7 @@ class ChangeUsernameView(APIView):
 	
 
 class PredictView(APIView):
-	permission_classes = [IsAuthenticated]
+	permission_classes = [AllowAny]
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def post(self, request):
@@ -98,8 +99,7 @@ class PredictView(APIView):
 		if serializer.is_valid():
 			try:
 				from .ml_models import get_classification_model
-				import tempfile
-				import os
+				
 				image_file = serializer.validated_data['image']
 
 				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
@@ -110,19 +110,29 @@ class PredictView(APIView):
 					model = get_classification_model()
 					result = model.predict(tmp_path, top_k=1)
 					
+					predicted_class = result['class']
+					
+					# Validate predicted class is within range (0-35 for augmented model)
+					if predicted_class < 0 or predicted_class > 35:
+						return Response({
+							'success': False,
+							'error': f'Model predicted invalid class {predicted_class}. Expected 0-35.'
+						}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+					
 					# Save to database
-					prediction = PredictionHistory.objects.create(
-						user=request.user,
-						image=image_file,
-						predicted_class=result['class'],
-						confidence=result['confidence']
-					)
+					# prediction = PredictionHistory.objects.create(
+					# 	user=request.user,
+					# 	image=image_file,
+					# 	predicted_class=result['class'],
+					# 	confidence=result['confidence']
+					# )
 					
 					return Response({
 						'success': True,
 						# 'prediction_id': prediction.id,
-						'predicted_class': result['class'],
-						'confidence': round(result['confidence'], 2)
+						'predicted_class': predicted_class,
+						'confidence': round(result['confidence'], 2),
+						'note': 'Model trained on 36 classes (0-35)'
 					}, status=status.HTTP_200_OK)
 				
 				finally:
@@ -139,15 +149,13 @@ class PredictView(APIView):
 
 
 class SimilarityView(APIView):
-	permission_classes = [IsAuthenticated]
+	permission_classes = [AllowAny]
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def _create_comparison_overlay(self, user_image_path, reference_image_path):
 		"""
-		Create transparent overlay comparison:
-		- User's image: Black & white with low opacity (semi-transparent)
-		- Reference image: Full color, inverted, full opacity
-		- Overlap shows where they match
+		Alpha blending comparison: Reference (high opacity) + User input (low opacity)
+		Returns tuple of (reference_image, user_image, blended_overlay)
 		"""
 		# Load images
 		user_img = Image.open(user_image_path).convert('L')
@@ -158,31 +166,44 @@ class SimilarityView(APIView):
 		user_img = user_img.resize(size, Image.Resampling.LANCZOS)
 		ref_img = ref_img.resize(size, Image.Resampling.LANCZOS)
 		
-		# Invert reference image (so strokes become white on black background)
-		ref_img_inverted = ImageOps.invert(ref_img)
+		# Convert to RGB for output
+		ref_output = ref_img.convert('RGB')
+		user_output = user_img.convert('RGB')
 		
-		# Create RGBA images for transparency
-		user_colored = Image.new('RGBA', size)
-		ref_colored = Image.new('RGBA', size)
+		# Convert to RGBA for alpha blending
+		ref_rgba = ref_img.convert('RGBA')
+		user_rgba = user_img.convert('RGBA')
 		
-		# User's image: Black & white with low opacity (60 out of 255)
-		user_data = []
-		for pixel in user_img.getdata():
-			# Keep as grayscale but with low opacity
-			user_data.append((pixel, pixel, pixel, 100))  # Low opacity (100/255 ≈ 40%)
-		user_colored.putdata(user_data)
+		# Create a white background
+		blended = Image.new('RGBA', size, (255, 255, 255, 255))
 		
-		# Reference image: Inverted, full color (red tint), full opacity
-		ref_data = []
-		for pixel in ref_img_inverted.getdata():
-			# Red-tinted reference with full opacity
-			ref_data.append((pixel, 0, 0, 255))  # Full opacity red
-		ref_colored.putdata(ref_data)
+		# Apply reference image with high opacity (80%)
+		ref_with_alpha = Image.new('RGBA', size, (255, 255, 255, 0))
+		ref_with_alpha.paste(ref_rgba, (0, 0))
+		# Adjust alpha channel for reference (high opacity = 204 out of 255)
+		ref_array = np.array(ref_with_alpha)
+		ref_array[:, :, 3] = (255 - ref_array[:, :, 0]) * 0.8  # 80% opacity on strokes
+		ref_with_alpha = Image.fromarray(ref_array.astype('uint8'), 'RGBA')
 		
-		# Composite: Reference as base, user on top with transparency
-		comparison = Image.alpha_composite(ref_colored, user_colored)
+		# Blend reference onto background
+		blended = Image.alpha_composite(blended, ref_with_alpha)
 		
-		return comparison.convert('RGB')
+		# Apply user image with low opacity (30%)
+		user_with_alpha = Image.new('RGBA', size, (255, 255, 255, 0))
+		user_with_alpha.paste(user_rgba, (0, 0))
+		# Adjust alpha channel for user input (low opacity = 76 out of 255)
+		user_array = np.array(user_with_alpha)
+		user_array[:, :, 3] = (255 - user_array[:, :, 0]) * 0.3  # 30% opacity on strokes
+		user_with_alpha = Image.fromarray(user_array.astype('uint8'), 'RGBA')
+		
+		# Blend user input on top
+		blended = Image.alpha_composite(blended, user_with_alpha)
+		
+		# Convert back to RGB for display
+		blended_output = blended.convert('RGB')
+		
+		# Return all three images as tuple
+		return ref_output, user_output, blended_output
 	
 	def post(self, request):
 		serializer = SimilaritySerializer(data=request.data)
@@ -194,18 +215,21 @@ class SimilarityView(APIView):
 				image_file = serializer.validated_data['image']
 				target_class = serializer.validated_data['target_class']
 				
-				# Path to reference image for the predicted class
+				if target_class < 0 or target_class > 35:
+					return Response({
+						'success': False,
+						'error': f'Invalid target_class {target_class}. Model supports classes 0-35 only.'
+					}, status=status.HTTP_400_BAD_REQUEST)
+				
 				reference_images_dir = os.path.join(settings.BASE_DIR, 'api', 'reference_images')
 				reference_image_path = os.path.join(reference_images_dir, f'class_{target_class}.png')
 				
-				# Check if reference image exists
 				if not os.path.exists(reference_image_path):
 					return Response({
 						'success': False,
-						'error': f'Reference image for class {target_class} not found. Please upload reference images.'
+						'error': f'Reference image for class {target_class} not found. Please ensure reference images exist for classes 0-35.'
 					}, status=status.HTTP_404_NOT_FOUND)
 				
-				# Save user's uploaded image temporarily
 				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
 					tmp.write(image_file.read())
 					tmp_path = tmp.name
@@ -217,37 +241,52 @@ class SimilarityView(APIView):
 					threshold = 0.45
 					is_same = distance < threshold
 					
-					# Generate comparison visualization
-					comparison_image = self._create_comparison_overlay(tmp_path, reference_image_path)
+					# Get all three images: reference, user, and blended overlay
+					ref_img, user_img, blended_img = self._create_comparison_overlay(tmp_path, reference_image_path)
 					
-					# Convert to base64 for response
-					buffered = BytesIO()
-					comparison_image.save(buffered, format="PNG")
-					comparison_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+					# Convert reference image to base64
+					ref_buffered = BytesIO()
+					ref_img.save(ref_buffered, format="PNG")
+					ref_base64 = base64.b64encode(ref_buffered.getvalue()).decode('utf-8')
 					
-					# Save comparison image to file for database
-					comparison_file = ContentFile(buffered.getvalue(), name=f'comparison_{target_class}.png')
+					# Convert user image to base64
+					user_buffered = BytesIO()
+					user_img.save(user_buffered, format="PNG")
+					user_base64 = base64.b64encode(user_buffered.getvalue()).decode('utf-8')
 					
-					# Save to database
-					similarity_history = SimilarityHistory.objects.create(
-						user=request.user,
-						user_image=image_file,
-						target_class=target_class,
-						similarity_score=similarity_score,
-						distance=distance,
-						is_same_character=is_same,
-						comparison_image=comparison_file
-					)
+					# Convert blended overlay to base64
+					blended_buffered = BytesIO()
+					blended_img.save(blended_buffered, format="PNG")
+					blended_base64 = base64.b64encode(blended_buffered.getvalue()).decode('utf-8')
+					
+					# Create ContentFile objects for saving
+					user_file = ContentFile(user_buffered.getvalue(), name=f'user_{target_class}.png')
+					ref_file = ContentFile(ref_buffered.getvalue(), name=f'ref_{target_class}.png')
+					blended_file = ContentFile(blended_buffered.getvalue(), name=f'blended_{target_class}.png')
+					
+					# similarity_history = SimilarityHistory.objects.create(
+					# 	user=request.user,
+					# 	user_image=user_file,
+					# 	reference_image=ref_file,
+					# 	target_class=target_class,
+					# 	similarity_score=similarity_score,
+					# 	distance=distance,
+					# 	is_same_character=is_same,
+					# 	blended_overlay=blended_file
+					# )
 					
 					return Response({
 						'success': True,
-						'history_id': similarity_history.id, # comment if no history
+						# 'history_id': similarity_history.id, # comment if no history
 						'similarity_score': round(similarity_score, 2),
 						'distance': round(distance, 4),
 						'is_same_character': is_same,
 						'threshold': threshold,
 						'compared_with_class': target_class,
-						'comparison_image': f'data:image/png;base64,{comparison_base64}'
+						'reference_image': f'data:image/png;base64,{ref_base64}',
+						'user_image': f'data:image/png;base64,{user_base64}',
+						'blended_overlay': f'data:image/png;base64,{blended_base64}',
+						'note': 'Model trained on 36 classes (0-35)'
 					}, status=status.HTTP_200_OK)
 				
 				finally:
@@ -264,102 +303,49 @@ class SimilarityView(APIView):
 
 
 
-class PredictionHistoryView(APIView):
-	"""Get user's prediction history"""
-	permission_classes = [IsAuthenticated]
-	
-	def get(self, request):
-		"""Get all predictions for the current user"""
-		predictions = PredictionHistory.objects.filter(user=request.user)
-		
-		data = [{
-			'id': pred.id,
-			'image_url': request.build_absolute_uri(pred.image.url) if pred.image else None,
-			'predicted_class': pred.predicted_class,
-			'confidence': round(pred.confidence, 2),
-			'created_at': pred.created_at.isoformat()
-		} for pred in predictions]
-		
-		return Response({
-			'success': True,
-			'count': len(data),
-			'predictions': data
-		}, status=status.HTTP_200_OK)
-
-
-class SimilarityHistoryView(APIView):
-	"""Get user's similarity comparison history"""
-	permission_classes = [IsAuthenticated]
-	
-	def get(self, request):
-		"""Get all similarity comparisons for the current user"""
-		similarities = SimilarityHistory.objects.filter(user=request.user)
-		
-		data = [{
-			'id': sim.id,
-			'user_image_url': request.build_absolute_uri(sim.user_image.url) if sim.user_image else None,
-			'comparison_image_url': request.build_absolute_uri(sim.comparison_image.url) if sim.comparison_image else None,
-			'target_class': sim.target_class,
-			'similarity_score': round(sim.similarity_score, 2),
-			'distance': round(sim.distance, 4),
-			'is_same_character': sim.is_same_character,
-			'created_at': sim.created_at.isoformat()
-		} for sim in similarities]
-		
-		return Response({
-			'success': True,
-			'count': len(data),
-			'similarities': data
-		}, status=status.HTTP_200_OK)
-	
-	
-# class GradCAMView(APIView):
+# class PredictionHistoryView(APIView):
 # 	permission_classes = [IsAuthenticated]
-# 	parser_classes = [MultiPartParser, FormParser]
 	
-# 	def post(self, request):
-# 		serializer = GradCAMSerializer(data=request.data)
-# 		if serializer.is_valid():
-# 			try:
-# 				from .ml_models import get_classification_model
-				
-# 				image_file = serializer.validated_data['image']
-# 				target_class = serializer.validated_data.get('target_class', None)
-				
-# 				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-# 					tmp.write(image_file.read())
-# 					tmp_path = tmp.name
-				
-# 				gradcam_path = tmp_path.replace('.png', '_gradcam.png')
-				
-# 				try:
-# 					model = get_classification_model()
-# 					result = model.generate_gradcam(tmp_path, target_class=target_class, save_path=gradcam_path)
-					
-# 					with open(gradcam_path, 'rb') as f:
-# 						gradcam_base64 = base64.b64encode(f.read()).decode('utf-8')
-					
-# 					return Response({
-# 						'success': True,
-# 						'predicted_class': result['predicted_class'],
-# 						'confidence': round(result['confidence'] * 100, 2),
-# 						'gradcam_image': f'data:image/png;base64,{gradcam_base64}'
-# 					}, status=status.HTTP_200_OK)
-				
-# 				finally:
-# 					if os.path.exists(tmp_path):
-# 						os.unlink(tmp_path)
-# 					if os.path.exists(gradcam_path):
-# 						os.unlink(gradcam_path)
-			
-# 			except Exception as e:
-# 				return Response({
-# 					'success': False,
-# 					'error': str(e)
-# 				}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+# 	def get(self, request):
+# 		predictions = PredictionHistory.objects.filter(user=request.user)
 		
-# 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+# 		data = [{
+# 			'id': pred.id,
+# 			'image_url': request.build_absolute_uri(pred.image.url) if pred.image else None,
+# 			'predicted_class': pred.predicted_class,
+# 			'confidence': round(pred.confidence, 2),
+# 			'created_at': pred.created_at.isoformat()
+# 		} for pred in predictions]
+		
+# 		return Response({
+# 			'success': True,
+# 			'count': len(data),
+# 			'predictions': data
+# 		}, status=status.HTTP_200_OK)
 
 
-
-
+# class SimilarityHistoryView(APIView):
+# 	permission_classes = [IsAuthenticated]
+	
+# 	def get(self, request):
+# 		similarities = SimilarityHistory.objects.filter(user=request.user)
+		
+# 		data = [{
+# 			'id': sim.id,
+# 			'user_image_url': request.build_absolute_uri(sim.user_image.url) if sim.user_image else None,
+# 			'reference_image_url': request.build_absolute_uri(sim.reference_image.url) if sim.reference_image else None,
+# 			'blended_overlay_url': request.build_absolute_uri(sim.blended_overlay.url) if sim.blended_overlay else None,
+# 			'target_class': sim.target_class,
+# 			'similarity_score': round(sim.similarity_score, 2),
+# 			'distance': round(sim.distance, 4),
+# 			'is_same_character': sim.is_same_character,
+# 			'created_at': sim.created_at.isoformat()
+# 		} for sim in similarities]
+		
+# 		return Response({
+# 			'success': True,
+# 			'count': len(data),
+# 			'similarities': data
+# 		}, status=status.HTTP_200_OK)
+	
+	

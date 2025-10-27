@@ -23,11 +23,12 @@ class SimilarityHistory(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='similarities')
     prediction = models.ForeignKey(PredictionHistory, on_delete=models.CASCADE, null=True, blank=True)
     user_image = models.ImageField(upload_to='similarity/%Y/%m/%d/')
+    reference_image = models.ImageField(upload_to='references/%Y/%m/%d/', null=True, blank=True)
     target_class = models.IntegerField()
     similarity_score = models.FloatField()
     distance = models.FloatField()
     is_same_character = models.BooleanField()
-    comparison_image = models.ImageField(upload_to='comparisons/%Y/%m/%d/', null=True, blank=True)
+    blended_overlay = models.ImageField(upload_to='blended/%Y/%m/%d/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:

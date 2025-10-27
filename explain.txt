@@ -70,3 +70,21 @@ Predict View -> Recognizes character
 SimilarityView -> Compare with reference image gives similarity score
 GradCAMView -> shows why model made the prediction Heatmap basically (no need to include)
 
+
+
+SimilarityView (views.py:215)
+    ↓
+model.compute_similarity()
+    ↓
+Loads: siamese_efficientnet_b0_best.pth (Line 134)
+    ↓
+Creates: SiameseNetwork with EfficientNet-B0 (Line 142)
+    ↓
+Uses: self.siamese_model(img1, img2) (Line 161)
+    ↓
+Returns: similarity_score and distance
+
+
+Already used comparison :
+Grid Method
+Alpha Blending Method

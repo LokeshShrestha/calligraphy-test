@@ -41,7 +41,7 @@ class ImageSerializer(serializers.Serializer):
 
 class SimilaritySerializer(serializers.Serializer):
     image = serializers.ImageField()
-    target_class = serializers.IntegerField(min_value=0, max_value=61)
+    target_class = serializers.IntegerField(min_value=0, max_value=35)  # Updated to 36 classes (0-35)
     class Meta:
         fields = ["image", "target_class"]
 

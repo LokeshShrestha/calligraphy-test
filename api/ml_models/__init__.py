@@ -23,9 +23,9 @@ def get_classification_model():
         _classification_model = RanjanaInference(
             model_name='efficientnet_b0',
             device='cpu',  # Change to 'cuda' if GPU available
-            checkpoint_path=str(model_path / 'efficientnet_b0_best.pth')
+            checkpoint_path=str(model_path / 'efficientnet_b0_augmented_best.pth')
         )
-        print("✓ Classification model initialized and cached")
+        print("✓ Classification model initialized and cached (augmented, 36 classes)")
     
     return _classification_model
 

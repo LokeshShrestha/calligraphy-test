@@ -6,7 +6,7 @@ A Django REST API backend for a mobile calligraphy learning application that rec
 
 | Feature | Endpoint | Model | Accuracy |
 |---------|----------|-------|----------|
-| **Character Recognition** | `POST /api/predict/` | EfficientNet-B0 (47MB) | 99.5% |
+| **Character Recognition** | `POST /api/predict/` | EfficientNet-B0 Augmented (47MB) | 99.5% |
 | **Similarity Comparison** | `POST /api/similarity/` | Siamese Network (25MB) | 92.7% |
 | **User Signup** | `POST /api/signup/` | - | - |
 | **User Signin** | `POST /api/signin/` | JWT Auth | - |
@@ -15,12 +15,14 @@ A Django REST API backend for a mobile calligraphy learning application that rec
 
 **Authentication:** JWT Bearer Token required for ML and history endpoints
 
+**Note:** Model trained on **36 classes (0-35)** using augmented dataset
+
 ## 🎯 Overview
 
 This backend supports a mobile app that helps users learn Ranjana script (an ancient Nepali script) by:
-- **Recognizing** handwritten characters using AI (99.5% accuracy)
+- **Recognizing** handwritten characters using AI (99.5% accuracy, 36 classes)
 - **Comparing** user's handwriting with reference samples (92.7% accuracy)
-- **Providing visual feedback** through color-coded comparison overlays
+- **Providing visual feedback** through side-by-side comparison overlays
 - **Authentication & User Management** with JWT-based security
 - **History Tracking** of predictions and similarity comparisons
 
@@ -28,15 +30,15 @@ This backend supports a mobile app that helps users learn Ranjana script (an anc
 
 ### API View Functions
 
-1. **PredictView** (Recognition) → *"I see character 23"*
-   - Identifies which Ranjana character is written
-   - Uses EfficientNet-B0 classification model
+1. **PredictView** (Recognition) → *"I see character 12"*
+   - Identifies which Ranjana character is written (36 classes: 0-35)
+   - Uses EfficientNet-B0 Augmented classification model
    - Returns class ID and confidence score
 
 2. **SimilarityView** (Comparison) → *"Your writing is 87% like the reference"*
    - Compares user's handwriting with reference character
    - Uses Siamese neural network for similarity scoring
-   - Generates color-coded overlay visualization
+   - Generates side-by-side comparison visualization with overlay
 
 3. **Authentication Views**
    - SignupView, SigninView (JWT-based)
@@ -56,22 +58,22 @@ This backend supports a mobile app that helps users learn Ranjana script (an anc
 - **Protected endpoints** requiring authentication
 
 ### 2. Character Recognition (PredictView)
-- **AI-powered recognition** of 62 Ranjana characters
-- **99.5% accuracy** using EfficientNet-B0 architecture
+- **AI-powered recognition** of 36 Ranjana characters (classes 0-35)
+- **99.5% accuracy** using EfficientNet-B0 Augmented architecture
 - Input: 64x64 grayscale images
-- Output: Character class (0-61) with confidence score
-- **Automatic history tracking** of user predictions
+- Output: Character class (0-35) with confidence score
+- **Automatic history tracking** of user predictions (optional)
 
 ### 3. Handwriting Similarity Analysis (SimilarityView)
 - **Compare user's handwriting** with reference samples
 - **92.7% accuracy** using Siamese neural network
 - Returns similarity percentage and visual comparison
-- **Color-coded overlay visualization**:
-  - 🔴 **Red**: Reference character strokes (areas to add)
-  - 🟢 **Green**: User's strokes (possible errors or variations)
-  - 🟡 **Yellow**: Matching areas (correct overlap)
-  - ⚫ **Black**: Background (no strokes)
+- **Side-by-side comparison visualization** (3 panels):
+  - **Left Panel**: Reference character (inverted, red-tinted)
+  - **Middle Panel**: User's handwriting (grayscale)
+  - **Right Panel**: Overlay comparison (red=reference, gray=user with transparency)
 - **Distance threshold**: < 0.45 indicates same character
+- **Automatic history tracking** of comparisons (optional)
 
 ### 4. Learning Progress Tracking
 - **Prediction History**: Track all character recognitions
@@ -80,9 +82,9 @@ This backend supports a mobile app that helps users learn Ranjana script (an anc
 - **Image storage** for later review
 
 ### 5. Deep Learning Models
-- **Classification Model**: `efficientnet_b0_best.pth` (47 MB)
-  - Identifies which character is written
-  - Uses EfficientNet-B0 architecture
+- **Classification Model**: `efficientnet_b0_augmented_best.pth` (47 MB)
+  - Identifies which character is written (36 classes: 0-35)
+  - Uses EfficientNet-B0 architecture with augmented training data
 - **Similarity Model**: `siamese_efficientnet_b0_best.pth` (25 MB)
   - Compares handwriting similarity using 128-dimensional embeddings
   - Twin encoder architecture for robust comparison
@@ -144,9 +146,11 @@ python manage.py migrate
 ### 6. Add Reference Images
 
 Place reference character images in `api/reference_images/`:
-- Filename format: `class_0.png`, `class_1.png`, ..., `class_61.png`
+- Filename format: `class_0.png`, `class_1.png`, ..., `class_35.png`
 - Images should be 64x64 grayscale PNG files
-- Total: 62 reference images (one per character class)
+- Total: 36 reference images (one per character class)
+
+**Note:** Model supports classes 0-35 only (36 classes total)
 
 ### 7. Run Development Server
 ```bash
@@ -311,10 +315,13 @@ http://localhost:8000/api/
 ```json
 {
   "success": true,
-  "predicted_class": 23,
-  "confidence": 98.5
+  "predicted_class": 12,
+  "confidence": 98.5,
+  "note": "Model trained on 36 classes (0-35)"
 }
 ```
+
+**Note:** Model supports classes 0-35 only (36 total classes)
 
 **Use Case:** *"What character is this?"*
 
@@ -342,8 +349,10 @@ curl -X POST http://localhost:8000/api/predict/ \
 - Body:
   ```
   image: <image_file> (PNG/JPEG, 64x64 recommended)
-  target_class: <integer> (0-61)
+  target_class: <integer> (0-35)
   ```
+
+**Note:** `target_class` must be between 0-35 (36 classes total)
 
 **Process Flow:**
 1. User uploads 2 images (user image + reference from database)
@@ -362,13 +371,13 @@ curl -X POST http://localhost:8000/api/predict/ \
 ```json
 {
   "success": true,
-  "history_id": 42,
   "similarity_score": 87.32,
   "distance": 0.38,
   "is_same_character": true,
   "threshold": 0.45,
-  "compared_with_class": 23,
-  "comparison_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg..."
+  "compared_with_class": 12,
+  "comparison_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg...",
+  "note": "Model trained on 36 classes (0-35)"
 }
 ```
 
@@ -376,10 +385,10 @@ curl -X POST http://localhost:8000/api/predict/ \
 - `similarity_score`: Percentage similarity (0-100%)
 - `distance`: Euclidean distance between embeddings (lower = more similar)
 - `is_same_character`: True if distance < 0.45 threshold
-- `comparison_image`: Base64-encoded overlay visualization
-  - 🔴 **Red**: Reference strokes only (areas to add)
-  - 🟢 **Green**: User's strokes only (possible errors)
-  - 🟡 **Yellow**: Matching areas (correct overlap)
+- `comparison_image`: Base64-encoded side-by-side comparison image with 3 panels:
+  - **Left**: Reference character (inverted, red-tinted)
+  - **Middle**: User's handwriting (grayscale)
+  - **Right**: Overlay (red=reference at full opacity, gray=user at 40% opacity)
 
 **Use Case:** *"How similar is the student's handwriting to the reference?"*
 
@@ -388,8 +397,10 @@ curl -X POST http://localhost:8000/api/predict/ \
 curl -X POST http://localhost:8000/api/similarity/ \
   -H "Authorization: Bearer <access_token>" \
   -F "image=@user_handwriting.png" \
-  -F "target_class=23"
+  -F "target_class=12"
 ```
+
+**Note:** `target_class` must be 0-35 (model trained on 36 classes)
 
 ---
 
@@ -416,13 +427,15 @@ curl -X POST http://localhost:8000/api/similarity/ \
     {
       "id": 1,
       "image_url": "http://localhost:8000/media/predictions/image.png",
-      "predicted_class": 23,
+      "predicted_class": 12,
       "confidence": 98.5,
       "created_at": "2025-10-26T10:30:00Z"
     }
   ]
 }
 ```
+
+**Note:** All `predicted_class` values will be 0-35
 
 ---
 
@@ -448,7 +461,7 @@ curl -X POST http://localhost:8000/api/similarity/ \
       "id": 1,
       "user_image_url": "http://localhost:8000/media/user_images/image.png",
       "comparison_image_url": "http://localhost:8000/media/comparisons/overlay.png",
-      "target_class": 23,
+      "target_class": 12,
       "similarity_score": 87.32,
       "distance": 0.38,
       "is_same_character": true,
@@ -457,6 +470,8 @@ curl -X POST http://localhost:8000/api/similarity/ \
   ]
 }
 ```
+
+**Note:** All `target_class` values will be 0-35
 
 ---
 
@@ -467,15 +482,15 @@ calligrapy/
 ├── api/                          # Main API application
 │   ├── ml_models/               # Machine learning models
 │   │   ├── weights/             # Pre-trained model weights
-│   │   │   ├── efficientnet_b0_best.pth
+│   │   │   ├── efficientnet_b0_augmented_best.pth (36 classes)
 │   │   │   └── siamese_efficientnet_b0_best.pth
-│   │   ├── config.py            # Model configurations
+│   │   ├── config.py            # Model configurations (NUM_CLASSES=36)
 │   │   ├── data_loader.py       # Data preprocessing
 │   │   ├── inference.py         # Prediction logic
 │   │   ├── models.py            # Model architectures
 │   │   └── siamese_network.py   # Siamese network implementation
-│   ├── reference_images/        # Reference character samples
-│   │   └── class_0.png ... class_61.png
+│   ├── reference_images/        # Reference character samples (36 images)
+│   │   └── class_0.png ... class_35.png
 │   ├── models.py                # Database models
 │   ├── serializers.py           # API serializers
 │   ├── views.py                 # API endpoints
@@ -493,22 +508,23 @@ calligrapy/
 
 ## 🧠 Machine Learning Models
 
-### 1. Classification Model (efficientnet_b0_best.pth - 47 MB)
+### 1. Classification Model (efficientnet_b0_augmented_best.pth - 47 MB)
 
 **Purpose:** Character Recognition
 
-**What it does:** Identifies which of the 62 Ranjana characters the input image represents
+**What it does:** Identifies which of the 36 Ranjana characters the input image represents
 
-**Architecture:** EfficientNet-B0 with custom classifier
+**Architecture:** EfficientNet-B0 with custom classifier, trained on augmented dataset
 
 **Specifications:**
 - **Input**: Single 64x64 grayscale image
-- **Output**: Class prediction (0-61) with confidence scores
+- **Output**: Class prediction (0-35) with confidence scores
 - **Accuracy**: 99.5%
+- **Classes**: 36 (range 0-35)
 
 **Use Case:** *"What character is this?"*
 
-**Model View:** `PredictView` → Recognition → "I see character 23"
+**Model View:** `PredictView` → Recognition → "I see character 12"
 
 ---
 
@@ -767,37 +783,42 @@ Django's default User model with fields:
 Stores user's character recognition history:
 - **user**: Foreign key to User
 - **image**: Uploaded image file
-- **predicted_class**: Class ID (0-61) returned by model
+- **predicted_class**: Class ID (0-35) returned by model
 - **confidence**: Prediction confidence score (0-100)
 - **created_at**: Timestamp of prediction
 
 **Purpose:** Track learning progress and review past recognitions
 
+**Note:** History saving is currently disabled by default (commented out in views)
+
 ### SimilarityHistory
 Stores handwriting comparison history:
 - **user**: Foreign key to User
 - **user_image**: User's uploaded handwriting image
-- **target_class**: Class ID of reference character
+- **target_class**: Class ID (0-35) of reference character
 - **similarity_score**: Similarity percentage (0-100)
 - **distance**: Euclidean distance between embeddings
 - **is_same_character**: Boolean (True if distance < 0.45)
-- **comparison_image**: Color-coded overlay visualization
+- **comparison_image**: Side-by-side comparison visualization
 - **created_at**: Timestamp of comparison
 
 **Purpose:** Track handwriting improvement and provide visual feedback history
 
-**Note:** History features are fully implemented and enabled with authentication.
+**Note:** History saving is currently disabled by default (commented out in views)
 
 ## 🎨 Visual Feedback System
 
-The similarity endpoint provides a color-coded overlay image that helps users understand their writing:
+The similarity endpoint provides a **side-by-side comparison image** with 3 panels:
 
-- **Red pixels**: Reference character strokes only (areas to add)
-- **Green pixels**: User's strokes only (possible errors or variations)
-- **Yellow pixels**: Matching areas (correct strokes)
-- **Black pixels**: Background (no strokes)
+### Panel Layout:
+1. **Left Panel - Reference**: Inverted reference character (white strokes on black, red-tinted)
+2. **Middle Panel - Your Input**: User's handwriting (grayscale as-is)
+3. **Right Panel - Overlay**: Composite showing differences
+   - **Red pixels**: Reference character strokes (full opacity)
+   - **Gray pixels**: User's strokes (40% opacity, semi-transparent)
+   - Areas where both overlap appear as a blend
 
-This visual feedback is encoded as base64 and can be displayed directly in mobile apps.
+This visual feedback is encoded as base64 and can be displayed directly in mobile apps, making it easy to see where the user's handwriting differs from the reference.
 
 
 ## 👥 Authors
@@ -818,8 +839,9 @@ Lokesh Shrestha
 
 **1. "Reference image not found" error**
 - Ensure reference images are in `api/reference_images/`
-- Check filename format: `class_0.png` through `class_61.png`
-- All 62 reference images must be present
+- Check filename format: `class_0.png` through `class_35.png`
+- All 36 reference images must be present (classes 0-35)
+- Model does not support classes beyond 35
 
 **2. Database connection errors**
 - Verify PostgreSQL is running: `pg_ctl status` or check services
@@ -829,9 +851,10 @@ Lokesh Shrestha
 
 **3. Model loading errors**
 - Ensure model weights exist in `api/ml_models/weights/`
-- Check file sizes: efficientnet_b0_best.pth (47MB), siamese_efficientnet_b0_best.pth (25MB)
+- Check file sizes: efficientnet_b0_augmented_best.pth (47MB), siamese_efficientnet_b0_best.pth (25MB)
 - Verify PyTorch is installed correctly: `pip show torch`
 - Try re-downloading model weights if corrupted
+- Make sure you're using the augmented model, not the old 62-class model
 
 **4. Image processing errors**
 - Check image format (PNG/JPEG supported)
@@ -860,7 +883,17 @@ Lokesh Shrestha
 - Activate virtual environment before running
 - Check Python version compatibility (3.8+)
 
+**9. Invalid class errors**
+- "Invalid target_class X. Model supports classes 0-35 only"
+  - Model trained on 36 classes (0-35), not 62
+  - Use only valid class IDs (0-35)
+  - Check MODEL_UPDATE_SUMMARY.md for migration details
+- "Model predicted invalid class X"
+  - This shouldn't happen with correct model file
+  - Ensure you're using `efficientnet_b0_augmented_best.pth`
+
 ---
 
 **Last Updated**: October 2025
 **API Version**: 1.0
+**Model Version**: Augmented (36 classes)
