@@ -87,4 +87,10 @@ Returns: similarity_score and distance
 
 Already used comparison :
 Grid Method
-Alpha Blending Method
+Alpha Blending Method ✅ works
+
+
+Image Pre-processing :
+Template Matching (Most Accurate)
+Smart Padding (Simpler, Fast)
+Bounding Box Detection + Auto-Crop
