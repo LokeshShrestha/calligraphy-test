@@ -12,8 +12,14 @@ A Django REST API backend for a mobile calligraphy learning application that rec
 | **User Signin** | `POST /api/signin/` | JWT Auth | - |
 | **Change Password** | `POST /api/change-password/` | JWT Auth | - |
 | **Change Username** | `POST /api/change-username/` | JWT Auth | - |
+| **Prediction History** | `GET /api/history/predictions/` | - | - |
+| **Similarity History** | `GET /api/history/similarities/` | - | - |
 
-**Authentication:** JWT Bearer Token required for password/username change endpoints only. ML endpoints are currently open for development (no authentication required)
+**Authentication:** 
+- JWT Bearer Token required for: password/username change endpoints, history endpoints
+- ML endpoints (predict, similarity) are currently open for development (no authentication required)
+
+**Note:** History saving to database is currently disabled in views.py (commented out). History endpoints are functional but will return empty data until saving is re-enabled.
 
 **Note:** Model trained on **36 classes (0-35)** using augmented dataset
 
@@ -25,6 +31,7 @@ This backend supports a mobile app that helps users learn Ranjana script (an anc
 - **Providing visual feedback** through three-panel comparison images (reference, user input, and blended overlay)
 - **Authentication & User Management** with JWT-based security
 - **Automatic image preprocessing** for optimal recognition results
+- **History Tracking** of predictions and similarity comparisons (available, currently not saving data)
 
 ## ✨ Key Capabilities
 
@@ -45,6 +52,11 @@ This backend supports a mobile app that helps users learn Ranjana script (an anc
 3. **Authentication Views**
    - SignupView, SigninView (JWT-based)
    - ChangePasswordView, ChangeUsernameView (requires authentication)
+
+4. **History Views**
+   - PredictionHistoryView, SimilarityHistoryView (requires authentication)
+   - Endpoints are active, but data saving is currently disabled
+   - Database models are in place and ready to use
 
 ## 🚀 Features
 
@@ -92,7 +104,18 @@ This backend supports a mobile app that helps users learn Ranjana script (an anc
 - **Standardized output**: All images resized to 64x64 pixels
 - **Fallback mechanism**: Uses original image if preprocessing fails
 
-### 5. Deep Learning Models
+### 5. Learning Progress Tracking (Available but Disabled)
+- **Database models ready**: PredictionHistory and SimilarityHistory models exist
+- **History endpoints active**: GET endpoints for retrieving history are functional
+- **Saving disabled**: Data saving is currently commented out in views.py
+- **To enable**: Uncomment the database save sections in PredictView and SimilarityView
+- **Features when enabled**:
+  - Track all character recognitions with images and confidence scores
+  - Review past handwriting comparisons with visual overlays
+  - Timestamped records for progress monitoring
+  - Organized media storage (predictions/, similarity/, references/, blended/)
+
+### 6. Deep Learning Models
 - **Classification Model**: `efficientnet_b0_augmented_best.pth` (47 MB)
   - Identifies which character is written (36 classes: 0-35)
   - Uses EfficientNet-B0 architecture with augmented training data
@@ -345,12 +368,6 @@ http://localhost:8000/api/
 
 **Use Case:** *"What character is this?"*
 
-**Example (cURL):**
-```bash
-curl -X POST http://localhost:8000/api/predict/ \
-  -F "image=@character.png"
-```
-
 ---
 
 #### 6. Handwriting Similarity Comparison
@@ -417,14 +434,112 @@ curl -X POST http://localhost:8000/api/predict/ \
 
 **Use Case:** *"How similar is the student's handwriting to the reference?"*
 
-**Example (cURL):**
-```bash
-curl -X POST http://localhost:8000/api/similarity/ \
-  -F "image=@user_handwriting.png" \
-  -F "target_class=12"
+---
+
+### History Endpoints
+
+#### 7. Get Prediction History
+
+**Endpoint:** `GET /api/history/predictions/`
+
+**Description:** Retrieve user's character recognition history
+
+**Authentication:** Required (Bearer Token)
+
+**Status:** Endpoint is active, but data saving is currently disabled. Will return empty results until saving is re-enabled in views.py.
+
+**Request:**
+- Method: `GET`
+- Headers: `Authorization: Bearer <access_token>`
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 15,
+  "predictions": [
+    {
+      "id": 1,
+      "image_url": "http://localhost:8000/media/predictions/2025/10/28/image.png",
+      "predicted_class": 12,
+      "confidence": 98.5,
+      "created_at": "2025-10-28T10:30:00Z"
+    }
+  ]
+}
 ```
 
-**Note:** `target_class` must be 0-35 (model trained on 36 classes)
+**Note:** All `predicted_class` values will be 0-35
+
+**To Enable Data Saving:**
+Uncomment the following section in `api/views.py` (PredictView):
+```python
+prediction = PredictionHistory.objects.create(
+    user=request.user,
+    image=image_file,
+    predicted_class=result['class'],
+    confidence=result['confidence']
+)
+```
+
+---
+
+#### 8. Get Similarity History
+
+**Endpoint:** `GET /api/history/similarities/`
+
+**Description:** Retrieve user's handwriting comparison history with all three comparison images
+
+**Authentication:** Required (Bearer Token)
+
+**Status:** Endpoint is active, but data saving is currently disabled. Will return empty results until saving is re-enabled in views.py.
+
+**Request:**
+- Method: `GET`
+- Headers: `Authorization: Bearer <access_token>`
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 8,
+  "similarities": [
+    {
+      "id": 1,
+      "user_image_url": "http://localhost:8000/media/similarity/2025/10/28/user_12.png",
+      "reference_image_url": "http://localhost:8000/media/references/2025/10/28/ref_12.png",
+      "blended_overlay_url": "http://localhost:8000/media/blended/2025/10/28/blended_12.png",
+      "target_class": 12,
+      "similarity_score": 87.32,
+      "distance": 0.38,
+      "is_same_character": true,
+      "created_at": "2025-10-28T11:45:00Z"
+    }
+  ]
+}
+```
+
+**Note:** All `target_class` values will be 0-35
+
+**To Enable Data Saving:**
+Uncomment the following section in `api/views.py` (SimilarityView):
+```python
+similarity_history = SimilarityHistory.objects.create(
+    user=request.user,
+    user_image=user_file,
+    reference_image=ref_file,
+    target_class=target_class,
+    similarity_score=similarity_score,
+    distance=distance,
+    is_same_character=is_same,
+    blended_overlay=blended_file
+)
+```
+
+Also uncomment in the response:
+```python
+'history_id': similarity_history.id,
+```
 
 ---
 
@@ -530,173 +645,34 @@ python-decouple                   # Environment variable management
 
 ## 🔧 Configuration
 
-### Django Settings
-Key settings in `calligrapy/settings.py`:
+Database, media files, and REST framework settings are configured in `calligrapy/settings.py`.
 
-```python
-# Media files (uploaded images)
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+Key configurations:
+- PostgreSQL database (credentials in `.env`)
+- JWT authentication with 1-hour access tokens, 7-day refresh tokens
+- Media files stored in `media/` directory
+- Default permission: IsAuthenticated (overridden to AllowAny for ML endpoints in development)
 
-# REST Framework
-REST_FRAMEWORK = {
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',  # Secure by default
-    ],
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ],
-}
-
-# JWT Settings
-from datetime import timedelta
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-}
-
-# Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        # Credentials loaded from .env file
-    }
-}
-```
-
-### URL Configuration
-
-The API has the following endpoint structure:
-
-```python
-# api/urls.py
-urlpatterns = [
-    # Authentication (AllowAny)
-    path('signup/', SignupView.as_view()),
-    path('signin/', SigninView.as_view()),
-    
-    # User Management (IsAuthenticated)
-    path('change-password/', ChangePasswordView.as_view()),
-    path('change-username/', ChangeUsernameView.as_view()),
-    
-    # Machine Learning (AllowAny - development mode)
-    path('predict/', PredictView.as_view()),
-    path('similarity/', SimilarityView.as_view()),
-    
-    # History endpoints (currently commented out)
-    # path('history/predictions/', PredictionHistoryView.as_view()),
-    # path('history/similarities/', SimilarityHistoryView.as_view()),
-]
-```
-
-**Note:** History endpoints are available in the code but currently disabled
+API endpoints are defined in `api/urls.py` with 8 active endpoints.
 
 ## 📱 Mobile App Integration
 
-### Request Format
-ML API requests (predict, similarity) currently do not require authentication (development mode).
-Auth endpoints (change password, change username) require JWT authentication:
-
-```javascript
-// Example: React Native / Flutter
-
-// For character recognition (NO AUTH REQUIRED)
-const formData = new FormData();
-formData.append('image', {
-  uri: imageUri,
-  type: 'image/png',
-  name: 'character.png'
-});
-
-fetch('http://your-server.com/api/predict/', {
-  method: 'POST',
-  body: formData,
-  headers: {
-    'Content-Type': 'multipart/form-data',
-  },
-})
-.then(response => response.json())
-.then(data => {
-  console.log(`Predicted class: ${data.predicted_class}`);
-  console.log(`Confidence: ${data.confidence}%`);
-  // Display processed_image (base64 encoded)
-});
-
-// For similarity comparison (NO AUTH REQUIRED)
-formData.append('target_class', '23');
-fetch('http://your-server.com/api/similarity/', {
-  method: 'POST',
-  body: formData,
-  headers: {
-    'Content-Type': 'multipart/form-data',
-  },
-})
-.then(response => response.json())
-.then(data => {
-  console.log(`Similarity: ${data.similarity_score}%`);
-  // Display three images:
-  // - data.reference_image (reference character)
-  // - data.user_image (user's handwriting, inverted)
-  // - data.blended_overlay (comparison overlay)
-});
-```
-
 ### Authentication Flow
+1. User signs up via `/api/signup/`
+2. User signs in via `/api/signin/` → receives JWT tokens
+3. Use access token in `Authorization: Bearer <token>` header for protected endpoints
+4. ML endpoints currently don't require authentication (development mode)
 
-```javascript
-// 1. User signup
-const signupData = {
-  username: 'user123',
-  email: 'user@example.com',
-  password: 'securepass',
-  password2: 'securepass'
-};
+### API Response Format
+All responses include a `success` boolean field and relevant data or error messages.
 
-fetch('http://your-server.com/api/signup/', {
-  method: 'POST',
-  headers: {'Content-Type': 'application/json'},
-  body: JSON.stringify(signupData)
-});
+### Image Handling
+Mobile apps can send images in any format - automatic preprocessing handles:
+- Grayscale conversion and thresholding
+- Smart cropping (removes noise, keeps character strokes)
+- Centering and resizing to 64x64 pixels
 
-// 2. User signin to get tokens
-const signinData = {
-  username: 'user123',
-  password: 'securepass'
-};
-
-fetch('http://your-server.com/api/signin/', {
-  method: 'POST',
-  headers: {'Content-Type': 'application/json'},
-  body: JSON.stringify(signinData)
-})
-.then(response => response.json())
-.then(data => {
-  const accessToken = data.access;
-  const refreshToken = data.refresh;
-  // Store tokens securely
-  AsyncStorage.setItem('access_token', accessToken);
-  AsyncStorage.setItem('refresh_token', refreshToken);
-});
-
-// 3. Use access token for authenticated requests
-const accessToken = await AsyncStorage.getItem('access_token');
-// Include in headers as shown above
-```
-
-### Image Preprocessing
-Mobile apps can send images in any format - the backend handles preprocessing automatically:
-1. **Automatic grayscale conversion**
-2. **Automatic thresholding** (Otsu's method)
-3. **Smart cropping** (removes noise, keeps character strokes)
-4. **Auto-resizing** to 64x64 pixels
-5. **Centering** in square canvas
-
-For best results, provide:
-- **Clear images** with good contrast
-- **White or light background** (will be auto-inverted if needed)
-- **Dark/black strokes** for the character
-- **PNG or JPEG** format
-- Any size (will be auto-processed)
+All images are returned as base64-encoded strings for easy display.
 
 ## 🚦 Error Handling
 
@@ -717,38 +693,22 @@ Common HTTP status codes:
 
 ## 🔐 Security Notes
 
-**Current Status**: 
-- API uses JWT (JSON Web Token) authentication for user management endpoints
-- ML endpoints (predict, similarity) are **currently open** (AllowAny) for development/testing
-- Auth management endpoints (change password, change username) require authentication (IsAuthenticated)
-- Signup/signin endpoints are public (AllowAny)
+**Current Development Status**: 
+- ML endpoints (predict, similarity): **Open access** (AllowAny)
+- User management (change password/username): **Protected** (IsAuthenticated)
+- History endpoints: **Protected** (IsAuthenticated)
+- JWT authentication: Active for protected endpoints
+- Token lifetime: 1 hour (access), 7 days (refresh)
 
-**Authentication Flow:**
-1. User signs up via `/api/signup/`
-2. User signs in via `/api/signin/` to receive JWT tokens
-3. Access token used for password/username change API calls
-4. Token included in header: `Authorization: Bearer <access_token>`
-5. **ML endpoints do not require authentication** (development mode)
-
-**For Production**:
-1. ✅ JWT authentication enabled (already implemented)
-2. **TODO**: Enable authentication for ML endpoints by changing permission_classes in views.py:
-   ```python
-   # Change from:
-   permission_classes = [AllowAny]
-   # To:
-   permission_classes = [IsAuthenticated]
-   ```
-3. Add CORS middleware for mobile app origins
-4. Use HTTPS for all API calls
-5. Set `DEBUG = False` in settings
-6. Configure `ALLOWED_HOSTS` properly
-7. Use environment variables for all secrets
-8. Enable rate limiting for API endpoints
-9. Implement token refresh mechanism
-10. Add request validation and sanitization
-11. Configure secure media file storage
-12. Consider implementing API key authentication for additional security
+**For Production Deployment**:
+1. Enable authentication for ML endpoints (change AllowAny to IsAuthenticated in views.py)
+2. Configure CORS for mobile app
+3. Enable HTTPS
+4. Set DEBUG=False
+5. Configure ALLOWED_HOSTS
+6. Secure all environment variables
+7. Enable rate limiting
+8. Configure secure media storage
 
 ## 📊 Database Models
 
@@ -821,11 +781,22 @@ Returns **three separate images** for comprehensive comparison:
    - **Overlapping areas**: Show where handwriting matches
    - White background for clarity
 
-All images are encoded as **base64** and can be displayed directly in mobile apps, making it easy to:
-- See the reference character clearly
-- Compare user's writing side-by-side
-- Identify specific areas that need improvement through the overlay
+All images are encoded as **base64** and can be displayed directly in mobile apps.
 
+## 📊 Database Models
+
+### User Model
+Django's default User model for authentication.
+
+### PredictionHistory
+- Fields: user, image, predicted_class (0-35), confidence, created_at
+- Storage: `media/predictions/YYYY/MM/DD/`
+- **Status:** Endpoint active, saving disabled (uncomment in views.py to enable)
+
+### SimilarityHistory
+- Fields: user, prediction, user_image, reference_image, target_class (0-35), similarity_score, distance, is_same_character, blended_overlay, created_at
+- Storage: `media/similarity/`, `media/references/`, `media/blended/` (organized by date)
+- **Status:** Endpoint active, saving disabled (uncomment in views.py to enable)
 
 ## 👥 Authors
 
@@ -869,44 +840,35 @@ Lokesh Shrestha
 - Recommended: 64x64 grayscale images
 
 **5. Authentication errors**
-- "Authentication credentials not provided": Include `Authorization: Bearer <token>` header
+- "Authentication credentials not provided": Include `Authorization: Bearer <token>` header for protected endpoints
 - "Token is invalid or expired": Sign in again to get new tokens
 - "User not found": Check username/password during signin
-- JWT token lifetime: Access tokens expire after 1 hour (refresh available for 7 days)
+- Note: ML endpoints currently don't require authentication (development mode)
 
 **6. Media file errors**
-- Ensure `MEDIA_ROOT` directory exists and is writable
+- Ensure `media/` directory exists and is writable
 - Check disk space for storing uploaded images
-- Verify media URL configuration in settings
 
 **7. CORS errors (when accessing from mobile app)**
-- Install django-cors-headers: `pip install django-cors-headers`
-- Add to `INSTALLED_APPS` in settings.py
-- Configure `CORS_ALLOWED_ORIGINS` for your mobile app
+- Install and configure django-cors-headers package
+- Add allowed origins in settings.py
 
 **8. ImportError or module not found**
 - Ensure all dependencies installed: `pip install -r requirements.txt`
 - Activate virtual environment before running
-- Check Python version compatibility (3.8+)
 
 **9. Invalid class errors**
-- "Invalid target_class X. Model supports classes 0-35 only"
-  - Model trained on 36 classes (0-35), not 62
-  - Use only valid class IDs (0-35)
-  - Check MODEL_UPDATE_SUMMARY.md for migration details
-- "Model predicted invalid class X"
-  - This shouldn't happen with correct model file
-  - Ensure you're using `efficientnet_b0_augmented_best.pth`
+- Model trained on 36 classes (0-35 only)
+- Ensure you're using `efficientnet_b0_augmented_best.pth`
 
 **10. Preprocessing errors**
-- If automatic preprocessing fails, the API falls back to using the original image
-- Check server logs for preprocessing error messages
-- Ensure images have clear contrast and visible character strokes
-- Very small or very large images may have issues - optimal range is 100x100 to 1000x1000
+- If automatic preprocessing fails, API falls back to original image
+- Check server logs for error messages
+- Ensure images have clear contrast and visible strokes
 
 ---
 
 **Last Updated**: October 28, 2025  
 **API Version**: 1.0  
 **Model Version**: Augmented (36 classes)  
-**Features**: Auto-preprocessing, JWT Auth, ML inference without auth (dev mode)
+**Status**: Development mode (ML endpoints open, history saving disabled)
