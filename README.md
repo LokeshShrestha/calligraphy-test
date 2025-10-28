@@ -10,10 +10,10 @@ A Django REST API backend for a mobile calligraphy learning application that rec
 | **Similarity Comparison** | `POST /api/similarity/` | Siamese Network (25MB) | 92.7% |
 | **User Signup** | `POST /api/signup/` | - | - |
 | **User Signin** | `POST /api/signin/` | JWT Auth | - |
-| **Prediction History** | `GET /api/history/predictions/` | - | - |
-| **Similarity History** | `GET /api/history/similarities/` | - | - |
+| **Change Password** | `POST /api/change-password/` | JWT Auth | - |
+| **Change Username** | `POST /api/change-username/` | JWT Auth | - |
 
-**Authentication:** JWT Bearer Token required for ML and history endpoints
+**Authentication:** JWT Bearer Token required for password/username change endpoints only. ML endpoints are currently open for development (no authentication required)
 
 **Note:** Model trained on **36 classes (0-35)** using augmented dataset
 
@@ -22,9 +22,9 @@ A Django REST API backend for a mobile calligraphy learning application that rec
 This backend supports a mobile app that helps users learn Ranjana script (an ancient Nepali script) by:
 - **Recognizing** handwritten characters using AI (99.5% accuracy, 36 classes)
 - **Comparing** user's handwriting with reference samples (92.7% accuracy)
-- **Providing visual feedback** through side-by-side comparison overlays
+- **Providing visual feedback** through three-panel comparison images (reference, user input, and blended overlay)
 - **Authentication & User Management** with JWT-based security
-- **History Tracking** of predictions and similarity comparisons
+- **Automatic image preprocessing** for optimal recognition results
 
 ## ✨ Key Capabilities
 
@@ -33,53 +33,64 @@ This backend supports a mobile app that helps users learn Ranjana script (an anc
 1. **PredictView** (Recognition) → *"I see character 12"*
    - Identifies which Ranjana character is written (36 classes: 0-35)
    - Uses EfficientNet-B0 Augmented classification model
-   - Returns class ID and confidence score
+   - Returns class ID, confidence score, and preprocessed image
+   - Includes automatic image preprocessing (thresholding, cropping, centering, resizing)
 
 2. **SimilarityView** (Comparison) → *"Your writing is 87% like the reference"*
    - Compares user's handwriting with reference character
    - Uses Siamese neural network for similarity scoring
-   - Generates side-by-side comparison visualization with overlay
+   - Returns three separate images: reference, user input, and blended overlay
+   - Generates visual comparison with color-coded differences
 
 3. **Authentication Views**
    - SignupView, SigninView (JWT-based)
-   - ChangePasswordView, ChangeUsernameView
-
-4. **History Views**
-   - PredictionHistoryView, SimilarityHistoryView
-   - Track user's learning progress over time
+   - ChangePasswordView, ChangeUsernameView (requires authentication)
 
 ## 🚀 Features
 
 ### 1. User Authentication & Management
 - **JWT-based authentication** for secure API access
 - **User signup/signin** with token-based sessions
-- **Password management** with secure password change
-- **Username updates** for user customization
-- **Protected endpoints** requiring authentication
+- **Password management** with secure password change (requires authentication)
+- **Username updates** for user customization (requires authentication)
+- **Flexible security**: ML endpoints open for development, auth endpoints protected
 
 ### 2. Character Recognition (PredictView)
 - **AI-powered recognition** of 36 Ranjana characters (classes 0-35)
 - **99.5% accuracy** using EfficientNet-B0 Augmented architecture
-- Input: 64x64 grayscale images
-- Output: Character class (0-35) with confidence score
-- **Automatic history tracking** of user predictions (optional)
+- Input: Images in PNG/JPEG format (automatically preprocessed)
+- Output: Character class (0-35) with confidence score and preprocessed image
+- **Automatic preprocessing pipeline**:
+  - Grayscale conversion
+  - Otsu's thresholding
+  - Contour detection and filtering
+  - Smart cropping (removes noise while keeping relevant strokes)
+  - Centering in square canvas
+  - Resizing to 64x64 pixels
+- **No authentication required** (development mode)
 
 ### 3. Handwriting Similarity Analysis (SimilarityView)
 - **Compare user's handwriting** with reference samples
 - **92.7% accuracy** using Siamese neural network
-- Returns similarity percentage and visual comparison
-- **Side-by-side comparison visualization** (3 panels):
-  - **Left Panel**: Reference character (inverted, red-tinted)
-  - **Middle Panel**: User's handwriting (grayscale)
-  - **Right Panel**: Overlay comparison (red=reference, gray=user with transparency)
+- Returns similarity percentage, distance, and three visual images
+- **Three-panel visual output**:
+  - **Reference Image**: Original reference character (grayscale, 256x256)
+  - **User Image**: User's handwriting with inverted colors (grayscale, 256x256)
+  - **Blended Overlay**: Composite comparison showing:
+    - Reference strokes at full opacity
+    - User strokes at 50% opacity (semi-transparent)
+    - Overlapping areas show where handwriting matches
 - **Distance threshold**: < 0.45 indicates same character
-- **Automatic history tracking** of comparisons (optional)
+- **No authentication required** (development mode)
 
-### 4. Learning Progress Tracking
-- **Prediction History**: Track all character recognitions
-- **Similarity History**: Review past handwriting comparisons
-- **Timestamped records** for progress monitoring
-- **Image storage** for later review
+### 4. Automatic Image Preprocessing
+- **Smart preprocessing pipeline** for optimal recognition
+- **Grayscale conversion** and thresholding
+- **Contour-based cropping** removes noise while preserving character strokes
+- **Selective contour merging** keeps nearby strokes together
+- **Automatic centering** in square canvas
+- **Standardized output**: All images resized to 64x64 pixels
+- **Fallback mechanism**: Uses original image if preprocessing fails
 
 ### 5. Deep Learning Models
 - **Classification Model**: `efficientnet_b0_augmented_best.pth` (47 MB)
@@ -290,25 +301,31 @@ http://localhost:8000/api/
 
 **Description:** Recognizes a Ranjana character from an uploaded image using EfficientNet-B0 classification model
 
-**Authentication:** Required (Bearer Token)
+**Authentication:** Not required (development mode)
 
 **Request:**
 - Method: `POST`
 - Content-Type: `multipart/form-data`
-- Headers: `Authorization: Bearer <access_token>`
 - Body:
   ```
-  image: <image_file> (PNG/JPEG, 64x64 recommended)
+  image: <image_file> (PNG/JPEG, any size - will be auto-preprocessed)
   ```
 
 **Process Flow:**
-1. User uploads image
+1. User uploads image (any size, any format)
 2. Image validated via ImageSerializer
 3. Saved to temporary file
-4. EfficientNet-B0 model loaded
-5. Prediction executed
-6. Returns class ID + confidence
-7. History saved to database (if enabled)
+4. **Automatic preprocessing**:
+   - Convert to grayscale
+   - Apply Otsu's thresholding
+   - Detect and filter contours
+   - Merge nearby contours (remove noise)
+   - Crop to bounding box
+   - Center in square canvas
+   - Resize to 64x64
+5. EfficientNet-B0 model loaded
+6. Prediction executed on preprocessed image
+7. Returns class ID, confidence, and preprocessed image (base64)
 8. Temporary file deleted
 
 **Response:**
@@ -317,18 +334,20 @@ http://localhost:8000/api/
   "success": true,
   "predicted_class": 12,
   "confidence": 98.5,
-  "note": "Model trained on 36 classes (0-35)"
+  "processed_image": "data:image/png;base64,iVBORw0KGgo..."
 }
 ```
 
-**Note:** Model supports classes 0-35 only (36 total classes)
+**Note:** 
+- Model supports classes 0-35 only (36 total classes)
+- Preprocessing is automatic - no need to manually resize or convert images
+- Returns the preprocessed image for verification
 
 **Use Case:** *"What character is this?"*
 
 **Example (cURL):**
 ```bash
 curl -X POST http://localhost:8000/api/predict/ \
-  -H "Authorization: Bearer <access_token>" \
   -F "image=@character.png"
 ```
 
@@ -340,32 +359,35 @@ curl -X POST http://localhost:8000/api/predict/ \
 
 **Description:** Compares user's handwriting with a reference character using Siamese neural network
 
-**Authentication:** Required (Bearer Token)
+**Authentication:** Not required (development mode)
 
 **Request:**
 - Method: `POST`
 - Content-Type: `multipart/form-data`
-- Headers: `Authorization: Bearer <access_token>`
 - Body:
   ```
-  image: <image_file> (PNG/JPEG, 64x64 recommended)
+  image: <image_file> (PNG/JPEG, any size)
   target_class: <integer> (0-35)
   ```
 
 **Note:** `target_class` must be between 0-35 (36 classes total)
 
 **Process Flow:**
-1. User uploads 2 images (user image + reference from database)
-2. Both images validated via SimilaritySerializer
-3. Saved to temporary files
-4. Siamese neural network loaded
-5. Extract 128-dimensional embeddings for each image
-6. Calculate Euclidean distance between embeddings
-7. Convert distance to similarity percentage
-8. Check if same character (distance < 0.45 threshold)
-9. Generate color-coded comparison overlay
-10. Return results with base64-encoded overlay
-11. Delete temporary files
+1. User uploads image and specifies target class (0-35)
+2. Image validated via SimilaritySerializer
+3. Reference image loaded from database (api/reference_images/class_X.png)
+4. Both images saved to temporary files
+5. Siamese neural network loaded
+6. Extract 128-dimensional embeddings for each image
+7. Calculate Euclidean distance between embeddings
+8. Convert distance to similarity percentage
+9. Check if same character (distance < 0.45 threshold)
+10. Generate three comparison images:
+    - Reference image (grayscale, 256x256)
+    - User image with inverted colors (grayscale, 256x256)
+    - Blended overlay (reference at full opacity + user at 50% opacity)
+11. Return results with all three images as base64
+12. Delete temporary files
 
 **Response:**
 ```json
@@ -376,8 +398,9 @@ curl -X POST http://localhost:8000/api/predict/ \
   "is_same_character": true,
   "threshold": 0.45,
   "compared_with_class": 12,
-  "comparison_image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg...",
-  "note": "Model trained on 36 classes (0-35)"
+  "reference_image": "data:image/png;base64,iVBORw0KGgo...",
+  "user_image": "data:image/png;base64,iVBORw0KGgo...",
+  "blended_overlay": "data:image/png;base64,iVBORw0KGgo..."
 }
 ```
 
@@ -385,93 +408,23 @@ curl -X POST http://localhost:8000/api/predict/ \
 - `similarity_score`: Percentage similarity (0-100%)
 - `distance`: Euclidean distance between embeddings (lower = more similar)
 - `is_same_character`: True if distance < 0.45 threshold
-- `comparison_image`: Base64-encoded side-by-side comparison image with 3 panels:
-  - **Left**: Reference character (inverted, red-tinted)
-  - **Middle**: User's handwriting (grayscale)
-  - **Right**: Overlay (red=reference at full opacity, gray=user at 40% opacity)
+- `reference_image`: Base64-encoded reference character (grayscale, 256x256)
+- `user_image`: Base64-encoded user's handwriting with inverted colors (grayscale, 256x256)
+- `blended_overlay`: Base64-encoded composite image showing:
+  - Reference strokes at full opacity
+  - User strokes at 50% opacity (semi-transparent)
+  - Overlapping areas show where handwriting matches
 
 **Use Case:** *"How similar is the student's handwriting to the reference?"*
 
 **Example (cURL):**
 ```bash
 curl -X POST http://localhost:8000/api/similarity/ \
-  -H "Authorization: Bearer <access_token>" \
   -F "image=@user_handwriting.png" \
   -F "target_class=12"
 ```
 
 **Note:** `target_class` must be 0-35 (model trained on 36 classes)
-
----
-
-### History Endpoints
-
-#### 7. Get Prediction History
-
-**Endpoint:** `GET /api/history/predictions/`
-
-**Description:** Retrieve user's character recognition history
-
-**Authentication:** Required (Bearer Token)
-
-**Request:**
-- Method: `GET`
-- Headers: `Authorization: Bearer <access_token>`
-
-**Response:**
-```json
-{
-  "success": true,
-  "count": 15,
-  "predictions": [
-    {
-      "id": 1,
-      "image_url": "http://localhost:8000/media/predictions/image.png",
-      "predicted_class": 12,
-      "confidence": 98.5,
-      "created_at": "2025-10-26T10:30:00Z"
-    }
-  ]
-}
-```
-
-**Note:** All `predicted_class` values will be 0-35
-
----
-
-#### 8. Get Similarity History
-
-**Endpoint:** `GET /api/history/similarities/`
-
-**Description:** Retrieve user's handwriting comparison history
-
-**Authentication:** Required (Bearer Token)
-
-**Request:**
-- Method: `GET`
-- Headers: `Authorization: Bearer <access_token>`
-
-**Response:**
-```json
-{
-  "success": true,
-  "count": 8,
-  "similarities": [
-    {
-      "id": 1,
-      "user_image_url": "http://localhost:8000/media/user_images/image.png",
-      "comparison_image_url": "http://localhost:8000/media/comparisons/overlay.png",
-      "target_class": 12,
-      "similarity_score": 87.32,
-      "distance": 0.38,
-      "is_same_character": true,
-      "created_at": "2025-10-26T11:45:00Z"
-    }
-  ]
-}
-```
-
-**Note:** All `target_class` values will be 0-35
 
 ---
 
@@ -618,31 +571,36 @@ The API has the following endpoint structure:
 ```python
 # api/urls.py
 urlpatterns = [
-    # Authentication
+    # Authentication (AllowAny)
     path('signup/', SignupView.as_view()),
     path('signin/', SigninView.as_view()),
+    
+    # User Management (IsAuthenticated)
     path('change-password/', ChangePasswordView.as_view()),
     path('change-username/', ChangeUsernameView.as_view()),
     
-    # Machine Learning
+    # Machine Learning (AllowAny - development mode)
     path('predict/', PredictView.as_view()),
     path('similarity/', SimilarityView.as_view()),
     
-    # History
-    path('history/predictions/', PredictionHistoryView.as_view()),
-    path('history/similarities/', SimilarityHistoryView.as_view()),
+    # History endpoints (currently commented out)
+    # path('history/predictions/', PredictionHistoryView.as_view()),
+    # path('history/similarities/', SimilarityHistoryView.as_view()),
 ]
 ```
+
+**Note:** History endpoints are available in the code but currently disabled
 
 ## 📱 Mobile App Integration
 
 ### Request Format
-All API requests require JWT authentication (except signup/signin):
+ML API requests (predict, similarity) currently do not require authentication (development mode).
+Auth endpoints (change password, change username) require JWT authentication:
 
 ```javascript
 // Example: React Native / Flutter
-const accessToken = 'your_jwt_token_here';
 
+// For character recognition (NO AUTH REQUIRED)
 const formData = new FormData();
 formData.append('image', {
   uri: imageUri,
@@ -650,32 +608,36 @@ formData.append('image', {
   name: 'character.png'
 });
 
-// For character recognition
 fetch('http://your-server.com/api/predict/', {
   method: 'POST',
   body: formData,
   headers: {
     'Content-Type': 'multipart/form-data',
-    'Authorization': `Bearer ${accessToken}`,
   },
 })
 .then(response => response.json())
-.then(data => console.log(data));
+.then(data => {
+  console.log(`Predicted class: ${data.predicted_class}`);
+  console.log(`Confidence: ${data.confidence}%`);
+  // Display processed_image (base64 encoded)
+});
 
-// For similarity comparison
+// For similarity comparison (NO AUTH REQUIRED)
 formData.append('target_class', '23');
 fetch('http://your-server.com/api/similarity/', {
   method: 'POST',
   body: formData,
   headers: {
     'Content-Type': 'multipart/form-data',
-    'Authorization': `Bearer ${accessToken}`,
   },
 })
 .then(response => response.json())
 .then(data => {
   console.log(`Similarity: ${data.similarity_score}%`);
-  // Display comparison_image (base64 encoded)
+  // Display three images:
+  // - data.reference_image (reference character)
+  // - data.user_image (user's handwriting, inverted)
+  // - data.blended_overlay (comparison overlay)
 });
 ```
 
@@ -722,11 +684,19 @@ const accessToken = await AsyncStorage.getItem('access_token');
 ```
 
 ### Image Preprocessing
-For best results, mobile apps should:
-1. Convert images to **grayscale**
-2. Resize to **64x64 pixels**
-3. Ensure **white background, black strokes** (or will be auto-inverted)
-4. Use **PNG or JPEG** format
+Mobile apps can send images in any format - the backend handles preprocessing automatically:
+1. **Automatic grayscale conversion**
+2. **Automatic thresholding** (Otsu's method)
+3. **Smart cropping** (removes noise, keeps character strokes)
+4. **Auto-resizing** to 64x64 pixels
+5. **Centering** in square canvas
+
+For best results, provide:
+- **Clear images** with good contrast
+- **White or light background** (will be auto-inverted if needed)
+- **Dark/black strokes** for the character
+- **PNG or JPEG** format
+- Any size (will be auto-processed)
 
 ## 🚦 Error Handling
 
@@ -748,27 +718,37 @@ Common HTTP status codes:
 ## 🔐 Security Notes
 
 **Current Status**: 
-- API uses JWT (JSON Web Token) authentication
-- All ML endpoints require authentication (`IsAuthenticated`)
-- Auth endpoints are public (`AllowAny`)
+- API uses JWT (JSON Web Token) authentication for user management endpoints
+- ML endpoints (predict, similarity) are **currently open** (AllowAny) for development/testing
+- Auth management endpoints (change password, change username) require authentication (IsAuthenticated)
+- Signup/signin endpoints are public (AllowAny)
 
 **Authentication Flow:**
 1. User signs up via `/api/signup/`
 2. User signs in via `/api/signin/` to receive JWT tokens
-3. Access token used for subsequent API calls
+3. Access token used for password/username change API calls
 4. Token included in header: `Authorization: Bearer <access_token>`
+5. **ML endpoints do not require authentication** (development mode)
 
 **For Production**:
 1. ✅ JWT authentication enabled (already implemented)
-2. Add CORS middleware for mobile app origins
-3. Use HTTPS for all API calls
-4. Set `DEBUG = False` in settings
-5. Configure `ALLOWED_HOSTS` properly
-6. Use environment variables for all secrets
-7. Enable rate limiting for API endpoints
-8. Implement token refresh mechanism
-9. Add request validation and sanitization
-10. Configure secure media file storage
+2. **TODO**: Enable authentication for ML endpoints by changing permission_classes in views.py:
+   ```python
+   # Change from:
+   permission_classes = [AllowAny]
+   # To:
+   permission_classes = [IsAuthenticated]
+   ```
+3. Add CORS middleware for mobile app origins
+4. Use HTTPS for all API calls
+5. Set `DEBUG = False` in settings
+6. Configure `ALLOWED_HOSTS` properly
+7. Use environment variables for all secrets
+8. Enable rate limiting for API endpoints
+9. Implement token refresh mechanism
+10. Add request validation and sanitization
+11. Configure secure media file storage
+12. Consider implementing API key authentication for additional security
 
 ## 📊 Database Models
 
@@ -787,38 +767,64 @@ Stores user's character recognition history:
 - **confidence**: Prediction confidence score (0-100)
 - **created_at**: Timestamp of prediction
 
-**Purpose:** Track learning progress and review past recognitions
+**Status:** Model exists but history saving is **currently disabled** (commented out in views.py)
 
-**Note:** History saving is currently disabled by default (commented out in views)
+**Purpose:** Track learning progress and review past recognitions (when enabled)
 
 ### SimilarityHistory
 Stores handwriting comparison history:
 - **user**: Foreign key to User
 - **user_image**: User's uploaded handwriting image
+- **reference_image**: Reference character image
+- **blended_overlay**: Composite comparison image
 - **target_class**: Class ID (0-35) of reference character
 - **similarity_score**: Similarity percentage (0-100)
 - **distance**: Euclidean distance between embeddings
 - **is_same_character**: Boolean (True if distance < 0.45)
-- **comparison_image**: Side-by-side comparison visualization
 - **created_at**: Timestamp of comparison
 
-**Purpose:** Track handwriting improvement and provide visual feedback history
+**Status:** Model exists but history saving is **currently disabled** (commented out in views.py)
 
-**Note:** History saving is currently disabled by default (commented out in views)
+**Purpose:** Track handwriting improvement and provide visual feedback history (when enabled)
+
+**Note:** To enable history tracking, uncomment the relevant code blocks in `api/views.py` (PredictView and SimilarityView)
 
 ## 🎨 Visual Feedback System
 
-The similarity endpoint provides a **side-by-side comparison image** with 3 panels:
+The API provides comprehensive visual feedback for both prediction and similarity endpoints:
 
-### Panel Layout:
-1. **Left Panel - Reference**: Inverted reference character (white strokes on black, red-tinted)
-2. **Middle Panel - Your Input**: User's handwriting (grayscale as-is)
-3. **Right Panel - Overlay**: Composite showing differences
-   - **Red pixels**: Reference character strokes (full opacity)
-   - **Gray pixels**: User's strokes (40% opacity, semi-transparent)
-   - Areas where both overlap appear as a blend
+### Prediction Endpoint
+Returns the **preprocessed image** showing exactly what the model analyzed:
+- **Grayscale** 64x64 image
+- **Thresholded** and cleaned (noise removed)
+- **Cropped** to character bounding box
+- **Centered** in square canvas
+- Returned as **base64-encoded PNG**
 
-This visual feedback is encoded as base64 and can be displayed directly in mobile apps, making it easy to see where the user's handwriting differs from the reference.
+### Similarity Endpoint
+Returns **three separate images** for comprehensive comparison:
+
+1. **Reference Image**: 
+   - Original reference character from database
+   - Grayscale, 256x256 pixels
+   - Shows the "correct" form
+
+2. **User Image**: 
+   - User's handwriting with **inverted colors**
+   - Grayscale, 256x256 pixels
+   - Inverted to match reference orientation
+
+3. **Blended Overlay**: 
+   - Composite image showing both characters
+   - **Reference strokes**: Full opacity (100%)
+   - **User strokes**: Semi-transparent (50% opacity)
+   - **Overlapping areas**: Show where handwriting matches
+   - White background for clarity
+
+All images are encoded as **base64** and can be displayed directly in mobile apps, making it easy to:
+- See the reference character clearly
+- Compare user's writing side-by-side
+- Identify specific areas that need improvement through the overlay
 
 
 ## 👥 Authors
@@ -892,8 +898,15 @@ Lokesh Shrestha
   - This shouldn't happen with correct model file
   - Ensure you're using `efficientnet_b0_augmented_best.pth`
 
+**10. Preprocessing errors**
+- If automatic preprocessing fails, the API falls back to using the original image
+- Check server logs for preprocessing error messages
+- Ensure images have clear contrast and visible character strokes
+- Very small or very large images may have issues - optimal range is 100x100 to 1000x1000
+
 ---
 
-**Last Updated**: October 2025
-**API Version**: 1.0
-**Model Version**: Augmented (36 classes)
+**Last Updated**: October 28, 2025  
+**API Version**: 1.0  
+**Model Version**: Augmented (36 classes)  
+**Features**: Auto-preprocessing, JWT Auth, ML inference without auth (dev mode)

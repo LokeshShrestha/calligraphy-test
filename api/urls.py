@@ -2,8 +2,7 @@
 from django.urls import path
 from .views import (
     SignupView, SigninView, ChangePasswordView, ChangeUsernameView,
-    PredictView, SimilarityView, 
-    # PredictionHistoryView, SimilarityHistoryView
+    PredictView, SimilarityView, PredictionHistoryView, SimilarityHistoryView
 )
 
 urlpatterns = [
@@ -18,8 +17,8 @@ urlpatterns = [
     
     
     
-    # path('history/predictions/', PredictionHistoryView.as_view(), name='prediction-history'),
-    # path('history/similarities/', SimilarityHistoryView.as_view(), name='similarity-history'),
+    path('history/predictions/', PredictionHistoryView.as_view(), name='prediction-history'),
+    path('history/similarities/', SimilarityHistoryView.as_view(), name='similarity-history'),
 
     # Extra feature if you want to :) but boring thing 
     # path('gradcam/', GradCAMView.as_view(), name='gradcam'),

@@ -227,7 +227,6 @@ class SimilarityView(APIView):
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def _create_comparison_overlay(self, user_image_path, reference_image_path):
-		# Load images
 		user_img = Image.open(user_image_path).convert('L')
 		ref_img = Image.open(reference_image_path).convert('L')
 		
@@ -293,22 +292,16 @@ class SimilarityView(APIView):
 					
 					threshold = 0.45
 					is_same = distance < threshold
-					
-					# Get all three images: reference, user, and blended overlay
 					ref_img, user_img, blended_img = self._create_comparison_overlay(tmp_path, reference_image_path)
-					# Convert reference image to base64
 					ref_buffered = BytesIO()
 					ref_img.save(ref_buffered, format="PNG")
 					ref_base64 = base64.b64encode(ref_buffered.getvalue()).decode('utf-8')
-					# Convert user image to base64
 					user_buffered = BytesIO()
 					user_img.save(user_buffered, format="PNG")
 					user_base64 = base64.b64encode(user_buffered.getvalue()).decode('utf-8')
-					# Convert blended overlay to base64
 					blended_buffered = BytesIO()
 					blended_img.save(blended_buffered, format="PNG")
 					blended_base64 = base64.b64encode(blended_buffered.getvalue()).decode('utf-8')
-					# Create ContentFile objects for saving
 					user_file = ContentFile(user_buffered.getvalue(), name=f'user_{target_class}.png')
 					ref_file = ContentFile(ref_buffered.getvalue(), name=f'ref_{target_class}.png')
 					blended_file = ContentFile(blended_buffered.getvalue(), name=f'blended_{target_class}.png')
@@ -351,49 +344,49 @@ class SimilarityView(APIView):
 
 
 
-# class PredictionHistoryView(APIView):
-# 	permission_classes = [IsAuthenticated]
+class PredictionHistoryView(APIView):
+	permission_classes = [IsAuthenticated]
 	
-# 	def get(self, request):
-# 		predictions = PredictionHistory.objects.filter(user=request.user)
+	def get(self, request):
+		predictions = PredictionHistory.objects.filter(user=request.user)
 		
-# 		data = [{
-# 			'id': pred.id,
-# 			'image_url': request.build_absolute_uri(pred.image.url) if pred.image else None,
-# 			'predicted_class': pred.predicted_class,
-# 			'confidence': round(pred.confidence, 2),
-# 			'created_at': pred.created_at.isoformat()
-# 		} for pred in predictions]
+		data = [{
+			'id': pred.id,
+			'image_url': request.build_absolute_uri(pred.image.url) if pred.image else None,
+			'predicted_class': pred.predicted_class,
+			'confidence': round(pred.confidence, 2),
+			'created_at': pred.created_at.isoformat()
+		} for pred in predictions]
 		
-# 		return Response({
-# 			'success': True,
-# 			'count': len(data),
-# 			'predictions': data
-# 		}, status=status.HTTP_200_OK)
+		return Response({
+			'success': True,
+			'count': len(data),
+			'predictions': data
+		}, status=status.HTTP_200_OK)
 
 
-# class SimilarityHistoryView(APIView):
-# 	permission_classes = [IsAuthenticated]
+class SimilarityHistoryView(APIView):
+	permission_classes = [IsAuthenticated]
 	
-# 	def get(self, request):
-# 		similarities = SimilarityHistory.objects.filter(user=request.user)
+	def get(self, request):
+		similarities = SimilarityHistory.objects.filter(user=request.user)
 		
-# 		data = [{
-# 			'id': sim.id,
-# 			'user_image_url': request.build_absolute_uri(sim.user_image.url) if sim.user_image else None,
-# 			'reference_image_url': request.build_absolute_uri(sim.reference_image.url) if sim.reference_image else None,
-# 			'blended_overlay_url': request.build_absolute_uri(sim.blended_overlay.url) if sim.blended_overlay else None,
-# 			'target_class': sim.target_class,
-# 			'similarity_score': round(sim.similarity_score, 2),
-# 			'distance': round(sim.distance, 4),
-# 			'is_same_character': sim.is_same_character,
-# 			'created_at': sim.created_at.isoformat()
-# 		} for sim in similarities]
+		data = [{
+			'id': sim.id,
+			'user_image_url': request.build_absolute_uri(sim.user_image.url) if sim.user_image else None,
+			'reference_image_url': request.build_absolute_uri(sim.reference_image.url) if sim.reference_image else None,
+			'blended_overlay_url': request.build_absolute_uri(sim.blended_overlay.url) if sim.blended_overlay else None,
+			'target_class': sim.target_class,
+			'similarity_score': round(sim.similarity_score, 2),
+			'distance': round(sim.distance, 4),
+			'is_same_character': sim.is_same_character,
+			'created_at': sim.created_at.isoformat()
+		} for sim in similarities]
 		
-# 		return Response({
-# 			'success': True,
-# 			'count': len(data),
-# 			'similarities': data
-# 		}, status=status.HTTP_200_OK)
+		return Response({
+			'success': True,
+			'count': len(data),
+			'similarities': data
+		}, status=status.HTTP_200_OK)
 	
 	
