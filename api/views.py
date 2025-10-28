@@ -15,6 +15,7 @@ import tempfile
 import os
 import base64
 import numpy as np
+import cv2 as cv
 from django.core.files.base import ContentFile
 from .models import PredictionHistory, SimilarityHistory
 
@@ -76,7 +77,90 @@ class ChangeUsernameView(APIView):
 		user.username = new_username
 		user.save()
 		return Response({'message': 'Username updated successfully.'}, status=status.HTTP_200_OK)
+
+
+def preprocess_image(image_path):
+	try:
+		# Read image
+		img = cv.imread(image_path)
+		if img is None:
+			raise ValueError(f"Error: Could not read image from {image_path}")
+		
+		# Convert to grayscale
+		img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+		
+		# Threshold: white letter on black background
+		_, thresh = cv.threshold(img_gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)
+		
+		# Optional clean-up: remove tiny dots or gaps
+		kernel = np.ones((2, 2), np.uint8)
+		thresh = cv.erode(thresh, kernel, iterations=1)
+		
+		# Find contours
+		contours, _ = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+		if not contours:
+			raise ValueError("No contours found in image")
+		
+		# Filter out very small areas (noise)
+		filtered = [c for c in contours if cv.contourArea(c) > 100]
+		if not filtered:
+			raise ValueError("No significant contours found after filtering")
+		
+		# Selective merging: keep contours that are near the largest one
+		main_contour = max(filtered, key=cv.contourArea)
+		x_main, y_main, w_main, h_main = cv.boundingRect(main_contour)
+		main_box = np.array([x_main, y_main, x_main + w_main, y_main + h_main])
+		
+		close_contours = [main_contour]
+		
+		for cnt in filtered:
+			if cnt is main_contour:
+				continue
+			x, y, w, h = cv.boundingRect(cnt)
+			# Compute overlap or closeness
+			if not (x + w < main_box[0] - 10 or x > main_box[2] + 10 or
+					y + h < main_box[1] - 10 or y > main_box[3] + 10):
+				close_contours.append(cnt)
+		
+		# Merge selected contours
+		all_points = np.vstack(close_contours)
+		
+		# Get bounding box around merged contours
+		x, y, w, h = cv.boundingRect(all_points)
+		
+		# Crop the region
+		cropped = thresh[y:y+h, x:x+w]
+		
+		# Center the cropped region in a square
+		side = max(w, h)
+		square = np.zeros((side, side), dtype=np.uint8)
+		start_x = (side - w) // 2
+		start_y = (side - h) // 2
+		square[start_y:start_y+h, start_x:start_x+w] = cropped
+		
+		# Resize to 64x64
+		resized = cv.resize(square, (64, 64), interpolation=cv.INTER_AREA)
+		
+		# Save processed image to temporary file
+		with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_processed:
+			processed_path = tmp_processed.name
+			cv.imwrite(processed_path, resized)
+		
+		# Convert to base64 for frontend
+		_, buffer = cv.imencode('.png', resized)
+		img_base64 = base64.b64encode(buffer).decode('utf-8')
+		
+		return processed_path, img_base64
 	
+	except Exception as e:
+		# If preprocessing fails, return original image
+		print(f"Preprocessing error: {str(e)}. Using original image.")
+		img = Image.open(image_path)
+		buffered = BytesIO()
+		img.save(buffered, format="PNG")
+		img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+		return image_path, img_base64
+
 
 class PredictView(APIView):
 	permission_classes = [AllowAny]
@@ -86,7 +170,6 @@ class PredictView(APIView):
 		serializer = ImageSerializer(data=request.data)
 		if serializer.is_valid():
 			try:
-				from .ml_models import get_classification_model
 				
 				image_file = serializer.validated_data['image']
 
@@ -95,8 +178,10 @@ class PredictView(APIView):
 					tmp_path = tmp.name
 				
 				try:
+					processed_image_path, processed_image_base64 = preprocess_image(tmp_path)
+					
 					model = get_classification_model()
-					result = model.predict(tmp_path, top_k=1)
+					result = model.predict(processed_image_path, top_k=1)
 					
 					predicted_class = result['class']
 					
@@ -119,12 +204,14 @@ class PredictView(APIView):
 						# 'prediction_id': prediction.id,
 						'predicted_class': predicted_class,
 						'confidence': round(result['confidence'], 2),
-						'note': 'Model trained on 36 classes (0-35)'
+						'processed_image': f'data:image/png;base64,{processed_image_base64}',
 					}, status=status.HTTP_200_OK)
 				
 				finally:
 					if os.path.exists(tmp_path):
 						os.unlink(tmp_path)
+					if 'processed_image_path' in locals() and processed_image_path != tmp_path and os.path.exists(processed_image_path):
+						os.unlink(processed_image_path)
 			
 			except Exception as e:
 				return Response({
@@ -143,39 +230,32 @@ class SimilarityView(APIView):
 		# Load images
 		user_img = Image.open(user_image_path).convert('L')
 		ref_img = Image.open(reference_image_path).convert('L')
+		
+		# INVERT user image colors (black becomes white, white becomes black)
+		user_img = ImageOps.invert(user_img)
+		
 		# Resize to same dimensions
 		size = (256, 256)
 		user_img = user_img.resize(size, Image.Resampling.LANCZOS)
 		ref_img = ref_img.resize(size, Image.Resampling.LANCZOS)
-		# Convert to RGB for output
 		ref_output = ref_img.convert('RGB')
 		user_output = user_img.convert('RGB')
-		# Convert to RGBA for alpha blending
 		ref_rgba = ref_img.convert('RGBA')
 		user_rgba = user_img.convert('RGBA')
-		# Create a white background
 		blended = Image.new('RGBA', size, (255, 255, 255, 255))
-		# Apply reference image with high opacity (80%)
 		ref_with_alpha = Image.new('RGBA', size, (255, 255, 255, 0))
 		ref_with_alpha.paste(ref_rgba, (0, 0))
-		# Adjust alpha channel for reference (high opacity = 204 out of 255)
 		ref_array = np.array(ref_with_alpha)
-		ref_array[:, :, 3] = (255 - ref_array[:, :, 0]) * 0.8  # 80% opacity on strokes
+		ref_array[:, :, 3] = (255 - ref_array[:, :, 0]) * 1  # 50% opacity on strokes
 		ref_with_alpha = Image.fromarray(ref_array.astype('uint8'), 'RGBA')
-		# Blend reference onto background
 		blended = Image.alpha_composite(blended, ref_with_alpha)
-		# Apply user image with low opacity (30%)
 		user_with_alpha = Image.new('RGBA', size, (255, 255, 255, 0))
 		user_with_alpha.paste(user_rgba, (0, 0))
-		# Adjust alpha channel for user input (low opacity = 76 out of 255)
 		user_array = np.array(user_with_alpha)
-		user_array[:, :, 3] = (255 - user_array[:, :, 0]) * 0.3  # 30% opacity on strokes
+		user_array[:, :, 3] = (255 - user_array[:, :, 0]) * 0.5  # 80% opacity on strokes
 		user_with_alpha = Image.fromarray(user_array.astype('uint8'), 'RGBA')
-		# Blend user input on top
 		blended = Image.alpha_composite(blended, user_with_alpha)
-		# Convert back to RGB for display
 		blended_output = blended.convert('RGB')
-		# Return all three images as tuple
 		return ref_output, user_output, blended_output
 	
 	def post(self, request):
@@ -255,7 +335,6 @@ class SimilarityView(APIView):
 						'reference_image': f'data:image/png;base64,{ref_base64}',
 						'user_image': f'data:image/png;base64,{user_base64}',
 						'blended_overlay': f'data:image/png;base64,{blended_base64}',
-						'note': 'Model trained on 36 classes (0-35)'
 					}, status=status.HTTP_200_OK)
 				
 				finally:

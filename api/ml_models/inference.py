@@ -139,9 +139,13 @@ class RanjanaInference:
             print(f"Loading Siamese model from: {siamese_checkpoint}")
             checkpoint = torch.load(siamese_checkpoint, map_location=self.device)
             
+            # Use default values if not in checkpoint
+            backbone = checkpoint.get('backbone', 'efficientnet_b0')
+            embedding_dim = checkpoint.get('embedding_dim', 128)
+            
             self.siamese_model = SiameseNetwork(
-                backbone=checkpoint['backbone'],
-                embedding_dim=checkpoint['embedding_dim'],
+                backbone=backbone,
+                embedding_dim=embedding_dim,
                 pretrained_path=None
             )
             self.siamese_model.load_state_dict(checkpoint['model_state_dict'])
