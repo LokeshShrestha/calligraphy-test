@@ -22,7 +22,7 @@ class CalligraphyAPITestCase(TestCase):
         
         # Base paths
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.test_image_path = os.path.join(self.base_dir, 'test_img', 'Screenshot 2025-10-28 202123.png')
+        self.test_image_path = os.path.join(self.base_dir, 'test_img', 'original_user_image.png')
         self.output_dir = os.path.join(self.base_dir, 'output')
         
         # Create output directory if it doesn't exist
