@@ -18,5 +18,5 @@ NUM_CHANNELS = 1  # Grayscale
 DEVICE = 'cpu'  # Change to 'cuda' if you have GPU
 
 # Normalization (default values for Ranjana dataset)
-MEAN = 0.5
-STD = 0.5
+MEAN = 0.2677
+STD = 0.4220

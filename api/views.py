@@ -251,7 +251,7 @@ class SimilarityView(APIView):
 		user_with_alpha = Image.new('RGBA', size, (255, 255, 255, 0))
 		user_with_alpha.paste(user_rgba, (0, 0))
 		user_array = np.array(user_with_alpha)
-		user_array[:, :, 3] = (255 - user_array[:, :, 0]) * 0.5  # 80% opacity on strokes
+		user_array[:, :, 3] = (255 - user_array[:, :, 0]) * 0.8  # 80% opacity on strokes
 		user_with_alpha = Image.fromarray(user_array.astype('uint8'), 'RGBA')
 		blended = Image.alpha_composite(blended, user_with_alpha)
 		blended_output = blended.convert('RGB')
