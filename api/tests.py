@@ -12,12 +12,8 @@ import json
 
 
 class CalligraphyAPITestCase(TestCase):
-    """
-    Complete test suite for the calligraphy recognition and similarity API
-    """
     
     def setUp(self):
-        """Set up test client and paths"""
         self.client = APIClient()
         
         # Base paths
@@ -25,10 +21,8 @@ class CalligraphyAPITestCase(TestCase):
         self.test_image_path = os.path.join(self.base_dir, 'test_img', 'l.jpg')
         self.output_dir = os.path.join(self.base_dir, 'output')
         
-        # Create output directory if it doesn't exist
         os.makedirs(self.output_dir, exist_ok=True)
         
-        # Check if test image exists
         if not os.path.exists(self.test_image_path):
             self.fail(f"Test image not found at: {self.test_image_path}")
         
@@ -39,17 +33,6 @@ class CalligraphyAPITestCase(TestCase):
         print(f"{'='*70}\n")
     
     def save_base64_image(self, base64_string, filename):
-        """
-        Helper method to save base64 encoded image to output folder
-        
-        Args:
-            base64_string: Base64 encoded image string (with or without data URI prefix)
-            filename: Name of the file to save
-        
-        Returns:
-            Full path to saved file
-        """
-        # Remove data URI prefix if present
         if ',' in base64_string:
             base64_string = base64_string.split(',')[1]
         
@@ -64,56 +47,35 @@ class CalligraphyAPITestCase(TestCase):
         return output_path
     
     def test_complete_workflow(self):
-        """
-        Test the complete workflow:
-        1. Upload image to PredictView
-        2. Get preprocessed image and prediction
-        3. Use prediction class in SimilarityView
-        4. Compare with reference image
-        5. Save all images to output folder
-        """
         
         print("\n" + "="*70)
         print("TEST: Complete Workflow (Predict -> Similarity)")
         print("="*70 + "\n")
         
-        # ============================================
-        # STEP 1: Upload original image and save
-        # ============================================
         print("Step 1: Saving Original User Image")
         print("-" * 70)
         
-        # Copy original image to output folder
         from shutil import copy2
         original_output_path = os.path.join(self.output_dir, 'original_user_image.png')
         copy2(self.test_image_path, original_output_path)
         print(f"✓ Saved: original_user_image.png")
-        
-        # ============================================
-        # STEP 2: Test PredictView - Get Prediction
-        # ============================================
         print("\nStep 2: Testing PredictView API")
         print("-" * 70)
-        
-        # Read and prepare image for upload
         with open(self.test_image_path, 'rb') as img_file:
             image_content = img_file.read()
         
-        # Create uploaded file
         uploaded_file = SimpleUploadedFile(
             name='test_image.png',
             content=image_content,
             content_type='image/png'
         )
         
-        # Make POST request to predict endpoint
         predict_response = self.client.post(
             '/api/predict/',
             {'image': uploaded_file},
             format='multipart'
         )
         
-        # Assert response is successful
         self.assertEqual(predict_response.status_code, status.HTTP_200_OK)
         predict_data = predict_response.json()
         
@@ -122,7 +84,6 @@ class CalligraphyAPITestCase(TestCase):
         self.assertIn('confidence', predict_data)
         self.assertIn('processed_image', predict_data)
         
-        # Extract prediction results
         predicted_class = predict_data['predicted_class']
         confidence = predict_data['confidence']
         processed_image_base64 = predict_data['processed_image']
@@ -131,7 +92,6 @@ class CalligraphyAPITestCase(TestCase):
         print(f"  - Predicted Class: {predicted_class}")
         print(f"  - Confidence: {confidence}%")
         
-        # Save preprocessed image
         print("\nStep 3: Saving Preprocessed Image")
         print("-" * 70)
         preprocessed_image_path = self.save_base64_image(
@@ -139,14 +99,9 @@ class CalligraphyAPITestCase(TestCase):
             f'preprocessed_image_class_{predicted_class}.png'
         )
         
-        # ============================================
-        # STEP 4: Test SimilarityView - Compare Images
-        # ============================================
         print("\nStep 4: Testing SimilarityView API with Preprocessed Image")
         print("-" * 70)
         
-        # Use the PREPROCESSED image (output from predict) for similarity test
-        # NOT the original user input
         with open(preprocessed_image_path, 'rb') as img_file:
             preprocessed_content = img_file.read()
         
@@ -158,7 +113,6 @@ class CalligraphyAPITestCase(TestCase):
         
         print(f"  Using preprocessed image as input (not original)")
         
-        # Make POST request to similarity endpoint using predicted class
         similarity_response = self.client.post(
             '/api/similarity/',
             {
@@ -168,15 +122,13 @@ class CalligraphyAPITestCase(TestCase):
             format='multipart'
         )
         
-        # Check if similarity view is working (might fail if Siamese model not found)
         if similarity_response.status_code != status.HTTP_200_OK:
             print(f"⚠ Similarity test skipped (Status: {similarity_response.status_code})")
             print(f"  This is likely due to missing Siamese model weights.")
             print(f"  PredictView works perfectly! Preprocessed image saved.")
             print("="*70 + "\n")
-            return  # Skip similarity tests if model not available
+            return  
         
-        # Assert response is successful
         self.assertEqual(similarity_response.status_code, status.HTTP_200_OK)
         similarity_data = similarity_response.json()
         
@@ -188,7 +140,6 @@ class CalligraphyAPITestCase(TestCase):
         self.assertIn('user_image', similarity_data)
         self.assertIn('blended_overlay', similarity_data)
         
-        # Extract similarity results
         similarity_score = similarity_data['similarity_score']
         distance = similarity_data['distance']
         is_same = similarity_data['is_same_character']
@@ -198,33 +149,24 @@ class CalligraphyAPITestCase(TestCase):
         print(f"  - Distance: {distance}")
         print(f"  - Is Same Character: {is_same}")
         
-        # ============================================
-        # STEP 5: Save All Similarity Images
-        # ============================================
         print("\nStep 5: Saving Similarity Comparison Images")
         print("-" * 70)
         
-        # Save reference image
         self.save_base64_image(
             similarity_data['reference_image'],
             f'reference_image_class_{predicted_class}.png'
         )
         
-        # Save user image (resized/processed by similarity)
         self.save_base64_image(
             similarity_data['user_image'],
             f'user_image_resized_class_{predicted_class}.png'
         )
         
-        # Save blended overlay
         self.save_base64_image(
             similarity_data['blended_overlay'],
             f'blended_overlay_class_{predicted_class}.png'
         )
         
-        # ============================================
-        # STEP 6: Print Summary
-        # ============================================
         print("\n" + "="*70)
         print("TEST SUMMARY")
         print("="*70)
@@ -269,7 +211,6 @@ class CalligraphyAPITestCase(TestCase):
         self.assertIn('confidence', data)
         self.assertIn('processed_image', data)
         
-        # Validate class range
         self.assertGreaterEqual(data['predicted_class'], 0)
         self.assertLessEqual(data['predicted_class'], 35)
         
@@ -291,7 +232,6 @@ class CalligraphyAPITestCase(TestCase):
                 content_type='image/png'
             )
         
-        # Test with class 0
         response = self.client.post(
             '/api/similarity/',
             {
@@ -301,7 +241,6 @@ class CalligraphyAPITestCase(TestCase):
             format='multipart'
         )
         
-        # Handle case where Siamese model might not be available
         if response.status_code != status.HTTP_200_OK:
             print(f"⚠ Similarity test skipped (Siamese model not available)")
             print("="*70 + "\n")
@@ -336,7 +275,6 @@ class CalligraphyAPITestCase(TestCase):
                 content_type='image/png'
             )
         
-        # Test with invalid class (> 35)
         response = self.client.post(
             '/api/similarity/',
             {
@@ -349,7 +287,6 @@ class CalligraphyAPITestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         data = response.json()
         
-        # Check if success key exists
         if 'success' in data:
             self.assertFalse(data['success'])
         
