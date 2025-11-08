@@ -2,7 +2,8 @@
 from django.urls import path
 from .views import (
     SignupView, SigninView, ChangePasswordView, ChangeUsernameView,
-    PredictView, SimilarityView, PredictionHistoryView, SimilarityHistoryView
+    PredictView, SimilarityView, PredictionHistoryView, SimilarityHistoryView,
+    FeedbackView
 )
 
 urlpatterns = [
@@ -14,6 +15,7 @@ urlpatterns = [
 
     path('predict/', PredictView.as_view(), name='predict'),
     path('similarity/', SimilarityView.as_view(), name='similarity'),
+    path('feedback/', FeedbackView.as_view(), name='feedback'),
     
     
     

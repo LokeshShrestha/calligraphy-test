@@ -7,7 +7,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import SignupSerializer, SigninSerializer, ImageSerializer, SimilaritySerializer
+from .serializers import SignupSerializer, SigninSerializer, ImageSerializer, SimilaritySerializer, FeedbackSerializer
 from rest_framework.parsers import MultiPartParser, FormParser
 from io import BytesIO
 from PIL import Image, ImageOps
@@ -18,6 +18,8 @@ import numpy as np
 import cv2 as cv
 from django.core.files.base import ContentFile
 from .models import PredictionHistory, SimilarityHistory
+import google.generativeai as genai
+from django.conf import settings
 
 from .ml_models import get_classification_model
 
@@ -343,6 +345,73 @@ class SimilarityView(APIView):
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+class FeedbackView(APIView):
+	permission_classes = [AllowAny]
+	parser_classes = [MultiPartParser, FormParser]
+	
+	def gemini_api_request(self, image_path, prompt):
+		try:
+			# Configure Gemini API
+			api_key = os.getenv('GEMINI_API_KEY')
+			if not api_key:
+				raise ValueError("GEMINI_API_KEY not found in environment variables")
+			
+			genai.configure(api_key=api_key)
+			
+			# Use gemini-pro-vision for image analysis
+			model = genai.GenerativeModel('gemini-2.5-flash')
+			
+			img = Image.open(image_path)
+			try:
+				response = model.generate_content([prompt, img])
+				result = response.text
+			finally:
+				img.close() 
+			
+			return result
+		
+		except Exception as e:
+			raise Exception(f"Gemini API request failed: {str(e)}")
+	
+	def post(self, request):
+		serializer = FeedbackSerializer(data=request.data)
+		if serializer.is_valid():
+			try:
+				image_file = serializer.validated_data['image']
+				
+				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+					tmp.write(image_file.read())
+					tmp_path = tmp.name
+				
+				try:
+					prompt = (
+						"Analyze the attached blended image (white=reference, blackish=input). "
+						"Provide only an actionable feedback summary. The summary must consist of "
+						"a general assessment sentence followed by a list of 4 specific focus points "
+						"for correction in the next attempt (e.g., 'Correcting the overall position/shift', "
+						"'Sharpening the top-right corner', etc.). Do not provide a detailed section-by-section "
+						"analysis or any introductory/closing remarks."
+					)
+					
+					feedback = self.gemini_api_request(tmp_path, prompt)
+					
+					return Response({
+						'success': True,
+						'feedback': feedback
+					}, status=status.HTTP_200_OK)
+				
+				finally:
+					if os.path.exists(tmp_path):
+						os.unlink(tmp_path)
+			
+			except Exception as e:
+				return Response({
+					'success': False,
+					'error': str(e)
+				}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+		
+		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class PredictionHistoryView(APIView):
 	permission_classes = [IsAuthenticated]

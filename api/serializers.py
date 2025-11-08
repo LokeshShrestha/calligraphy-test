@@ -46,6 +46,12 @@ class SimilaritySerializer(serializers.Serializer):
         fields = ["image", "target_class"]
 
 
+class FeedbackSerializer(serializers.Serializer):
+    image = serializers.ImageField()
+    class Meta:
+        fields = ["image"]
+
+
 # class GradCAMSerializer(serializers.Serializer):
 #     image = serializers.ImageField()
 #     target_class = serializers.IntegerField(required=False, min_value=0, max_value=61)
