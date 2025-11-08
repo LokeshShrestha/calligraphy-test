@@ -22,6 +22,4 @@ urlpatterns = [
     path('history/predictions/', PredictionHistoryView.as_view(), name='prediction-history'),
     path('history/similarities/', SimilarityHistoryView.as_view(), name='similarity-history'),
 
-    # Extra feature if you want to :) but boring thing 
-    # path('gradcam/', GradCAMView.as_view(), name='gradcam'),
 ]
