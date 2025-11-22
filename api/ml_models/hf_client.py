@@ -12,8 +12,15 @@ class HuggingFaceMLClient:
         self.space_url = space_url.rstrip('/')
         self.client = Client(self.space_url)
     
-    def predict(self, image_path, top_k=1):
-        """Predict character class"""
+    def predict(self, image_path, top_k=1, skip_preprocessing=False):
+        """
+        Predict character class
+        
+        Args:
+            image_path: Path to image file
+            top_k: Number of top predictions (not used, for API compatibility)
+            skip_preprocessing: If True, image is already preprocessed (ignored for HF API)
+        """
         try:
             # Call Gradio API - Classification interface
             result = self.client.predict(
@@ -28,8 +35,19 @@ class HuggingFaceMLClient:
         except Exception as e:
             raise Exception(f"HF API prediction failed: {str(e)}")
     
-    def compute_similarity(self, image1_path, image2_path):
-        """Compute similarity between two images"""
+    def compute_similarity(self, image1_path, image2_path, siamese_checkpoint=None, skip_preprocessing=False):
+        """
+        Compute similarity between two images
+        
+        Args:
+            image1_path: Path to first image
+            image2_path: Path to second image
+            siamese_checkpoint: Not used for HF API (for compatibility)
+            skip_preprocessing: If True, images are already preprocessed (ignored for HF API)
+        
+        Returns:
+            tuple: (similarity_score, distance, ref_image_pil, user_image_pil, overlay_image_pil)
+        """
         try:
             # Call Gradio API - Similarity interface
             result = self.client.predict(
@@ -38,7 +56,36 @@ class HuggingFaceMLClient:
                 api_name="/compute_similarity"
             )
             
-            return result['similarity_score'], result['distance']
+            # Debug: print result structure
+            print(f"HF API result type: {type(result)}")
+            print(f"HF API result length: {len(result) if isinstance(result, (list, tuple)) else 'N/A'}")
+            
+            # result should be a tuple: (dict, ref_image, user_image, overlay_image)
+            if not isinstance(result, (list, tuple)) or len(result) < 4:
+                raise Exception(f"Unexpected HF API response format. Expected tuple with 4 elements, got: {type(result)} with length {len(result) if isinstance(result, (list, tuple)) else 'N/A'}")
+            
+            result_dict = result[0]
+            ref_image_result = result[1]
+            user_image_result = result[2]
+            overlay_image_result = result[3]
+            
+            # Gradio returns file paths as strings, load them as PIL Images
+            if isinstance(ref_image_result, str):
+                ref_image = Image.open(ref_image_result)
+            else:
+                ref_image = ref_image_result
+            
+            if isinstance(user_image_result, str):
+                user_image = Image.open(user_image_result)
+            else:
+                user_image = user_image_result
+            
+            if isinstance(overlay_image_result, str):
+                overlay_image = Image.open(overlay_image_result)
+            else:
+                overlay_image = overlay_image_result
+            
+            return result_dict['similarity_score'], result_dict['distance'], ref_image, user_image, overlay_image
         except Exception as e:
             raise Exception(f"HF API similarity failed: {str(e)}")
     

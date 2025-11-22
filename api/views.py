@@ -27,13 +27,15 @@ from datetime import datetime, timedelta
 
 # Use HuggingFace Space API instead of local models
 _hf_client = None
+_use_hf_api = None
+_reference_image_cache = {}  # Cache for reference images
 
 def get_ml_client():
-	global _hf_client
+	global _hf_client, _use_hf_api
 	if _hf_client is None:
 		# Check if we should use HF or local models
-		use_hf = os.getenv('USE_HUGGINGFACE_API', 'False') == 'True'
-		if use_hf:
+		_use_hf_api = os.getenv('USE_HUGGINGFACE_API', 'False') == 'True'
+		if _use_hf_api:
 			from .ml_models.hf_client import get_hf_client
 			_hf_client = get_hf_client()
 		else:
@@ -41,6 +43,19 @@ def get_ml_client():
 			from .ml_models import get_classification_model
 			_hf_client = get_classification_model()
 	return _hf_client
+
+def is_using_hf_api():
+	"""Check if using HuggingFace API"""
+	global _use_hf_api
+	if _use_hf_api is None:
+		_use_hf_api = os.getenv('USE_HUGGINGFACE_API', 'False') == 'True'
+	return _use_hf_api
+
+def get_reference_image_path(target_class):
+	"""Get reference image path with validation"""
+	reference_images_dir = os.path.join(settings.BASE_DIR, 'api', 'reference_images')
+	reference_image_path = os.path.join(reference_images_dir, f'class_{target_class}.png')
+	return reference_image_path if os.path.exists(reference_image_path) else None
 
 @method_decorator(csrf_exempt, name='dispatch')
 class SignupView(APIView):
@@ -183,6 +198,32 @@ def preprocess_image(image_path):
 		img.save(buffered, format="PNG")
 		img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
 		return image_path, img_base64
+		# Fallback: minimal preprocessing
+		print(f"Preprocessing error: {str(e)}. Using fallback.")
+		try:
+			img = cv.imread(image_path, cv.IMREAD_GRAYSCALE)
+			if img is None:
+				raise
+			# Apply threshold and resize without cropping
+			_, thresh = cv.threshold(img, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)
+			resized = cv.resize(thresh, (64, 64), interpolation=cv.INTER_AREA)
+			_, buffer = cv.imencode('.png', resized)
+			img_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
+			
+			# Save fallback
+			with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_processed:
+				fallback_path = tmp_processed.name
+				cv.imwrite(fallback_path, resized)
+			
+			return fallback_path, img_base64
+		except:
+			# Ultimate fallback - just resize original
+			img = Image.open(image_path).convert('L')
+			img = img.resize((64, 64), Image.Resampling.LANCZOS)
+			buffered = BytesIO()
+			img.save(buffered, format="PNG")
+			img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+			return image_path, img_base64
 
 
 class FeedbackView(APIView):
@@ -217,28 +258,61 @@ class FeedbackView(APIView):
 		serializer = FeedbackSerializer(data=request.data)
 		if serializer.is_valid():
 			try:
-				image_file = serializer.validated_data['image']
+				# Extract base64 images and decode them
+				user_image_base64 = serializer.validated_data['user_image'].replace('data:image/png;base64,', '')
+				reference_image_base64 = serializer.validated_data['reference_image'].replace('data:image/png;base64,', '')
+				blended_overlay_base64 = serializer.validated_data['blended_overlay'].replace('data:image/png;base64,', '')
+				
+				target_class = serializer.validated_data['target_class']
+				similarity_score = serializer.validated_data['similarity_score']
+				distance = serializer.validated_data['distance']
+				is_same_character = serializer.validated_data['is_same_character']
+				
+				# Decode blended image for Gemini API
+				blended_image_data = base64.b64decode(blended_overlay_base64)
 				
 				with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
-					tmp.write(image_file.read())
+					tmp.write(blended_image_data)
 					tmp_path = tmp.name
 				
 				try:
 					prompt = (
 						"Analyze the attached blended image (white=reference, blackish=input). "
-								"Provide only an actionable feedback summary. The summary must consist of "
-								"a general assessment sentence followed by a list of 4 specific focus points "
-								"for correction in the next attempt. Format the response as follows:<br><br>"
-								"[General assessment sentence]<br><br>"
-								"Focus points for correction:<br>"
-								"1. [First point]<br>"
-								"2. [Second point]<br>"
-								"3. [Third point]<br>"
-								"4. [Fourth point]<br><br>"
-								"Do not provide a detailed section-by-section analysis or any introductory/closing remarks."
+						"Provide only an actionable feedback summary. The summary must consist of "
+						"a general assessment sentence followed by a list of 4 specific focus points "
+						"for correction in the next attempt. Format the response as follows:<br><br>"
+						"[General assessment sentence]<br><br>"
+						"Focus points for correction:<br>"
+						"1. [First point]<br>"
+						"2. [Second point]<br>"
+						"3. [Third point]<br>"
+						"4. [Fourth point]<br><br>"
+						"Do not provide a detailed section-by-section analysis or any introductory/closing remarks."
 					)
 					
 					feedback = self.gemini_api_request(tmp_path, prompt)
+					
+					# Save to history if user is authenticated
+					if request.user.is_authenticated:
+						# Convert base64 back to image files for storage
+						user_image_data = base64.b64decode(user_image_base64)
+						reference_image_data = base64.b64decode(reference_image_base64)
+						
+						user_image_content = ContentFile(user_image_data, name=f'user_{target_class}.png')
+						ref_image_content = ContentFile(reference_image_data, name=f'ref_{target_class}.png')
+						blended_image_content = ContentFile(blended_image_data, name=f'blended_{target_class}.png')
+						
+						SimilarityHistory.objects.create(
+							user=request.user,
+							user_image=user_image_content,
+							reference_image=ref_image_content,
+							target_class=target_class,
+							similarity_score=similarity_score,
+							distance=distance,
+							is_same_character=is_same_character,
+							blended_overlay=blended_image_content,
+							feedback=feedback
+						)
 					
 					return Response({
 						'success': True,
@@ -272,10 +346,22 @@ class PredictView(APIView):
 					tmp_path = tmp.name
 				
 				try:
-					processed_image_path, processed_image_base64 = preprocess_image(tmp_path)
-					
 					model = get_ml_client()
-					result = model.predict(processed_image_path, top_k=1)
+					
+					if is_using_hf_api():
+						# HF Space now has OpenCV preprocessing - send original image
+						processed_image_path = tmp_path
+						# Still generate base64 for frontend display
+						img = Image.open(tmp_path)
+						buffered = BytesIO()
+						img.save(buffered, format="PNG")
+						processed_image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+						
+						result = model.predict(processed_image_path, top_k=1)
+					else:
+						# Local model - do OpenCV preprocessing locally
+						processed_image_path, processed_image_base64 = preprocess_image(tmp_path)
+						result = model.predict(processed_image_path, top_k=1, skip_preprocessing=True)
 					
 					predicted_class = result['class']
 					
@@ -326,32 +412,55 @@ class SimilarityView(APIView):
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def _create_comparison_overlay(self, user_image_path, reference_image_path):
-		user_img = Image.open(user_image_path).convert('L')
+		"""Create comparison overlay with preprocessed user image and original reference"""
+		# Preprocess only user image
+		user_processed_path, _ = preprocess_image(user_image_path)
+		
+		# Open preprocessed user and original reference
+		user_img = Image.open(user_processed_path).convert('L')
 		ref_img = Image.open(reference_image_path).convert('L')
 		
+		# Invert user image
 		user_img = ImageOps.invert(user_img)
 		
+		# Resize to display size
 		size = (256, 256)
 		user_img = user_img.resize(size, Image.Resampling.LANCZOS)
 		ref_img = ref_img.resize(size, Image.Resampling.LANCZOS)
+		
+		# Create display versions
 		ref_output = ref_img.convert('RGB')
 		user_output = user_img.convert('RGB')
+		
+		# Create overlay
 		ref_rgba = ref_img.convert('RGBA')
 		user_rgba = user_img.convert('RGBA')
 		blended = Image.new('RGBA', size, (255, 255, 255, 255))
+		
+		# Reference layer (full opacity)
 		ref_with_alpha = Image.new('RGBA', size, (255, 255, 255, 0))
 		ref_with_alpha.paste(ref_rgba, (0, 0))
 		ref_array = np.array(ref_with_alpha)
 		ref_array[:, :, 3] = (255 - ref_array[:, :, 0]) * 1
 		ref_with_alpha = Image.fromarray(ref_array.astype('uint8'), 'RGBA')
 		blended = Image.alpha_composite(blended, ref_with_alpha)
+		
+		# User layer (80% opacity)
 		user_with_alpha = Image.new('RGBA', size, (255, 255, 255, 0))
 		user_with_alpha.paste(user_rgba, (0, 0))
 		user_array = np.array(user_with_alpha)
 		user_array[:, :, 3] = (255 - user_array[:, :, 0]) * 0.8
 		user_with_alpha = Image.fromarray(user_array.astype('uint8'), 'RGBA')
 		blended = Image.alpha_composite(blended, user_with_alpha)
+		
 		blended_output = blended.convert('RGB')
+		
+		# Clean up temp file
+		try:
+			os.unlink(user_processed_path)
+		except:
+			pass
+		
 		return ref_output, user_output, blended_output
 	
 	def post(self, request):
@@ -368,10 +477,9 @@ class SimilarityView(APIView):
 						'error': f'Invalid target_class {target_class}. Model supports classes 0-35 only.'
 					}, status=status.HTTP_400_BAD_REQUEST)
 				
-				reference_images_dir = os.path.join(settings.BASE_DIR, 'api', 'reference_images')
-				reference_image_path = os.path.join(reference_images_dir, f'class_{target_class}.png')
-				
-				if not os.path.exists(reference_image_path):
+				# Use helper function for reference image
+				reference_image_path = get_reference_image_path(target_class)
+				if not reference_image_path:
 					return Response({
 						'success': False,
 						'error': f'Reference image for class {target_class} not found.'
@@ -393,11 +501,32 @@ class SimilarityView(APIView):
 				
 				try:
 					model = get_ml_client()
-					similarity_score, distance = model.compute_similarity(tmp_path, reference_image_path)
+					
+					if is_using_hf_api():
+						# HF Space returns everything: score, distance, and all images
+						similarity_score, distance, ref_img, user_img, blended_img = model.compute_similarity(
+							tmp_path, 
+							reference_image_path
+						)
+						# Ensure they are PIL Images
+						if not isinstance(ref_img, Image.Image):
+							raise ValueError(f"HF API returned invalid ref_img type: {type(ref_img)}")
+						if not isinstance(user_img, Image.Image):
+							raise ValueError(f"HF API returned invalid user_img type: {type(user_img)}")
+						if not isinstance(blended_img, Image.Image):
+							raise ValueError(f"HF API returned invalid blended_img type: {type(blended_img)}")
+					else:
+						# Local model - images already preprocessed, skip ML preprocessing
+						similarity_score, distance = model.compute_similarity(
+							tmp_path, 
+							reference_image_path,
+							skip_preprocessing=True
+						)
+						# Create overlay locally
+						ref_img, user_img, blended_img = self._create_comparison_overlay(tmp_path, reference_image_path)
 					
 					threshold = 0.45
 					is_same = distance < threshold
-					ref_img, user_img, blended_img = self._create_comparison_overlay(tmp_path, reference_image_path)
 					ref_buffered = BytesIO()
 					ref_img.save(ref_buffered, format="PNG")
 					ref_base64 = base64.b64encode(ref_buffered.getvalue()).decode('utf-8')
@@ -407,66 +536,6 @@ class SimilarityView(APIView):
 					blended_buffered = BytesIO()
 					blended_img.save(blended_buffered, format="PNG")
 					blended_base64 = base64.b64encode(blended_buffered.getvalue()).decode('utf-8')
-					
-					# Generate AI feedback using Gemini
-					try:
-						# Save blended image temporarily for Gemini API
-						with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_blended:
-							blended_img.save(tmp_blended, format="PNG")
-							tmp_blended_path = tmp_blended.name
-						
-						try:
-							prompt = (
-								"Analyze the attached blended image (white=reference, blackish=input). "
-								"Provide only an actionable feedback summary. The summary must consist of "
-								"a general assessment sentence followed by a list of 4 specific focus points "
-								"for correction in the next attempt. Format the response EXACTLY as follows:\n\n"
-								"[General assessment sentence]\n\n"
-								"Focus points for correction:\n"
-								"1. [First point]\n"
-								"2. [Second point]\n"
-								"3. [Third point]\n"
-								"4. [Fourth point]\n\n"
-								"Do not provide a detailed section-by-section analysis or any introductory/closing remarks. "
-								"Make sure each numbered point is on a separate line with a line break after each one."
-							)
-							
-							# Use FeedbackView's method
-							feedback_view = FeedbackView()
-							feedback = feedback_view.gemini_api_request(tmp_blended_path, prompt)
-						finally:
-							if os.path.exists(tmp_blended_path):
-								os.unlink(tmp_blended_path)
-					except Exception as e:
-						print(f"Gemini API error: {str(e)}. Using fallback feedback.")
-						# Fallback feedback if Gemini API fails
-						if similarity_score >= 90:
-							feedback = "Excellent work! Your calligraphy closely matches the reference. The stroke consistency and overall form are very well executed."
-						elif similarity_score >= 75:
-							feedback = "Great job! Your calligraphy shows good understanding of the character form. Focus on refining the stroke endings and maintaining consistent pressure throughout."
-						elif similarity_score >= 60:
-							feedback = "Good effort! You've captured the basic structure well. Work on the stroke angles and spacing to improve similarity with the reference."
-						else:
-							feedback = "Keep practicing! Focus on the fundamental stroke order and basic shape. Study the reference image carefully and practice the individual strokes before attempting the full character."
-					
-					# Save to history if user is authenticated
-					if request.user.is_authenticated:
-						# Save the images to ContentFile for database storage
-						user_image_content = ContentFile(user_buffered.getvalue(), name=f'user_{target_class}.png')
-						ref_image_content = ContentFile(ref_buffered.getvalue(), name=f'ref_{target_class}.png')
-						blended_image_content = ContentFile(blended_buffered.getvalue(), name=f'blended_{target_class}.png')
-						
-						similarity_history = SimilarityHistory.objects.create(
-							user=request.user,
-							user_image=user_image_content,
-							reference_image=ref_image_content,
-							target_class=target_class,
-							similarity_score=similarity_score,
-							distance=distance,
-							is_same_character=is_same,
-							blended_overlay=blended_image_content,
-							feedback=feedback
-						)
 					
 					return Response({
 						'success': True,
@@ -479,7 +548,6 @@ class SimilarityView(APIView):
 						'user_image': f'data:image/png;base64,{user_base64}',
 						'gradcam_image': f'data:image/png;base64,{blended_base64}',
 						'blended_overlay': f'data:image/png;base64,{blended_base64}',
-						'feedback': feedback,
 					}, status=status.HTTP_200_OK)
 				
 				finally:

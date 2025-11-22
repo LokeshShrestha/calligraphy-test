@@ -53,6 +53,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django.middleware.gzip.GZipMiddleware",  # Compress responses
 ]
 
 ROOT_URLCONF = "calligrapy.urls"
@@ -87,6 +88,10 @@ DATABASES = {
         'PASSWORD': os.getenv('DB_PASSWORD'),
         'HOST': os.getenv('DB_HOST'),
         'PORT': os.getenv('DB_PORT'),
+        'CONN_MAX_AGE': 600,  # Connection pooling - reuse connections for 10 minutes
+        'OPTIONS': {
+            'connect_timeout': 10,
+        }
     }
 }
 
@@ -138,6 +143,10 @@ STORAGES = {
     },
 }
 
+# WhiteNoise optimization
+WHITENOISE_MAX_AGE = 31536000  # Cache static files for 1 year
+WHITENOISE_COMPRESS_OFFLINE = True  # Pre-compress static files
+
 # Media files (User uploaded images)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -159,6 +168,16 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
     ),
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
+    'PAGE_SIZE': 50,  # Paginate large responses
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/day',  # Anonymous users
+        'user': '1000/day'  # Authenticated users
+    }
 }
 
 # JWT Settings

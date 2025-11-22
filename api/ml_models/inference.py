@@ -42,29 +42,43 @@ class RanjanaInference:
         self.model = self.model.to(self.device)
         self.model.eval()
     
-    def preprocess_image(self, image_path):
-        """Preprocess image for inference"""
+    def preprocess_image(self, image_path, skip_preprocessing=False):
+        """
+        Preprocess image for inference
+        
+        Args:
+            image_path: Path to image file
+            skip_preprocessing: If True, assumes image is already preprocessed
+                               (e.g., by views.py preprocess_image) and only applies transforms
+        """
         image = Image.open(image_path)
         
-        # Convert to grayscale
-        if image.mode == 'RGBA':
-            background = Image.new('RGB', image.size, (255, 255, 255))
-            background.paste(image, mask=image.split()[3])
-            image = background.convert('L')
-        elif image.mode != 'L':
-            image = image.convert('L')
+        # Only do grayscale conversion if not skipping preprocessing
+        if not skip_preprocessing:
+            # Convert to grayscale
+            if image.mode == 'RGBA':
+                background = Image.new('RGB', image.size, (255, 255, 255))
+                background.paste(image, mask=image.split()[3])
+                image = background.convert('L')
+            elif image.mode != 'L':
+                image = image.convert('L')
+        else:
+            # Image already preprocessed, just ensure it's in the right mode
+            if image.mode != 'L':
+                image = image.convert('L')
         
         # Apply transforms
         image_tensor = self.transform(image).unsqueeze(0)
         return image_tensor, image
     
-    def classify(self, image_path: str, top_k: int = 5):
+    def classify(self, image_path: str, top_k: int = 5, skip_preprocessing: bool = False):
         """
         Classify an image
         
         Args:
             image_path: Path to image
             top_k: Number of top predictions to return
+            skip_preprocessing: If True, assumes image is already preprocessed
         
         Returns:
             top_classes: Array of top k class indices
@@ -73,7 +87,7 @@ class RanjanaInference:
         import torch
         import torch.nn.functional as F
         
-        image_tensor, _ = self.preprocess_image(image_path)
+        image_tensor, _ = self.preprocess_image(image_path, skip_preprocessing)
         image_tensor = image_tensor.to(self.device)
         
         with torch.no_grad():
@@ -87,13 +101,14 @@ class RanjanaInference:
         
         return top_classes, top_probs
     
-    def predict(self, image_path: str, top_k: int = 5):
+    def predict(self, image_path: str, top_k: int = 5, skip_preprocessing: bool = False):
         """
         User-friendly prediction with dict return format
         
         Args:
             image_path: Path to image
             top_k: Number of top predictions
+            skip_preprocessing: If True, assumes image is already preprocessed
         
         Returns:
             dict: {
@@ -103,7 +118,7 @@ class RanjanaInference:
                 'top_confidences': list[float]
             }
         """
-        top_classes, top_probs = self.classify(image_path, top_k)
+        top_classes, top_probs = self.classify(image_path, top_k, skip_preprocessing)
         
         return {
             'class': int(top_classes[0]),
@@ -113,7 +128,7 @@ class RanjanaInference:
         }
     
     def compute_similarity(self, image1_path: str, image2_path: str, 
-                          siamese_checkpoint: str = None):
+                          siamese_checkpoint: str = None, skip_preprocessing: bool = False):
         """
         Compute similarity between two images using Siamese Network
         
@@ -121,6 +136,7 @@ class RanjanaInference:
             image1_path: Path to first image
             image2_path: Path to second image
             siamese_checkpoint: Path to Siamese model checkpoint
+            skip_preprocessing: If True, assumes images are already preprocessed
         
         Returns:
             similarity_score: Similarity percentage [0, 100]
@@ -159,8 +175,8 @@ class RanjanaInference:
             print("✓ Siamese model loaded")
         
         # Preprocess both images
-        img1_tensor, _ = self.preprocess_image(image1_path)
-        img2_tensor, _ = self.preprocess_image(image2_path)
+        img1_tensor, _ = self.preprocess_image(image1_path, skip_preprocessing)
+        img2_tensor, _ = self.preprocess_image(image2_path, skip_preprocessing)
         img1_tensor = img1_tensor.to(self.device)
         img2_tensor = img2_tensor.to(self.device)
         

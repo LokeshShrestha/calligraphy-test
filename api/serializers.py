@@ -46,6 +46,12 @@ class SimilaritySerializer(serializers.Serializer):
     class Meta:
         fields = ["image", "processed_image_base64", "target_class"]
 class FeedbackSerializer(serializers.Serializer):
-    image = serializers.ImageField()
+    user_image = serializers.CharField(required=True)  # base64
+    reference_image = serializers.CharField(required=True)  # base64
+    blended_overlay = serializers.CharField(required=True)  # base64
+    target_class = serializers.IntegerField(min_value=0, max_value=35)
+    similarity_score = serializers.FloatField(required=True)
+    distance = serializers.FloatField(required=True)
+    is_same_character = serializers.BooleanField(required=True)
     class Meta:
-        fields = ["image"]
+        fields = ["user_image", "reference_image", "blended_overlay", "target_class", "similarity_score", "distance", "is_same_character"]
