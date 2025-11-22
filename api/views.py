@@ -579,16 +579,13 @@ class UserStatisticsView(APIView):
 	
 	def get(self, request):
 		try:
-			# Get optional query parameters
 			target_class = request.query_params.get('target_class')
 			days = request.query_params.get('days')
 			start_date = request.query_params.get('start_date')
 			end_date = request.query_params.get('end_date')
 			
-			# Start with base queryset
 			similarities = SimilarityHistory.objects.filter(user=request.user)
 			
-			# Apply filters based on parameters
 			if target_class is not None:
 				try:
 					target_class = int(target_class)
