@@ -25,15 +25,22 @@ from django.conf import settings
 from django.db.models import Avg, Count, Max, Q
 from datetime import datetime, timedelta
 
-# Lazy import to avoid loading PyTorch during startup
-_classification_model = None
+# Use HuggingFace Space API instead of local models
+_hf_client = None
 
-def get_classification_model():
-	global _classification_model
-	if _classification_model is None:
-		from .ml_models import get_classification_model as _get_model
-		_classification_model = _get_model()
-	return _classification_model
+def get_ml_client():
+	global _hf_client
+	if _hf_client is None:
+		# Check if we should use HF or local models
+		use_hf = os.getenv('USE_HUGGINGFACE_API', 'False') == 'True'
+		if use_hf:
+			from .ml_models.hf_client import get_hf_client
+			_hf_client = get_hf_client()
+		else:
+			# Fallback to local models
+			from .ml_models import get_classification_model
+			_hf_client = get_classification_model()
+	return _hf_client
 
 @method_decorator(csrf_exempt, name='dispatch')
 class SignupView(APIView):
@@ -267,7 +274,7 @@ class PredictView(APIView):
 				try:
 					processed_image_path, processed_image_base64 = preprocess_image(tmp_path)
 					
-					model = get_classification_model()
+					model = get_ml_client()
 					result = model.predict(processed_image_path, top_k=1)
 					
 					predicted_class = result['class']
@@ -279,18 +286,23 @@ class PredictView(APIView):
 						}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 					
 					# Save to history if user is authenticated
+					# Convert confidence from 0-1 to 0-100 if needed
+					confidence = result['confidence']
+					if confidence <= 1.0:
+						confidence = confidence * 100
+					
 					if request.user.is_authenticated:
 						prediction_history = PredictionHistory.objects.create(
 							user=request.user,
 							image=image_file,
 							predicted_class=predicted_class,
-							confidence=result['confidence']
+							confidence=confidence
 						)
 					
 					return Response({
 						'success': True,
 						'predicted_class': predicted_class,
-						'confidence': round(result['confidence'], 2),
+						'confidence': round(confidence, 2),
 						'processed_image': f'data:image/png;base64,{processed_image_base64}',
 					}, status=status.HTTP_200_OK)
 				
@@ -380,7 +392,7 @@ class SimilarityView(APIView):
 						tmp_path = tmp.name
 				
 				try:
-					model = get_classification_model()
+					model = get_ml_client()
 					similarity_score, distance = model.compute_similarity(tmp_path, reference_image_path)
 					
 					threshold = 0.45

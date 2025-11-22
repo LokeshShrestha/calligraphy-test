@@ -7,7 +7,6 @@ A Django REST API backend for a mobile calligraphy learning application that rec
 ## 📖 Documentation Quick Links
 
 - **[Quick Start Guide](QUICK_START.md)** - Get running in 5 minutes
-- **[Production Readiness Assessment](PRODUCTION_READINESS.md)** - Detailed 75% readiness analysis
 - **[Full API Documentation](#-api-endpoints)** - Complete endpoint reference (below)
 
 ---

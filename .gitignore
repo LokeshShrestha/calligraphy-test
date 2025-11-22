@@ -1,6 +1,7 @@
 .env
 .vscode
 frontend/
+huggingface_space/
 *.pyc
 __pycache__/
 *.db
