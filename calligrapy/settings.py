@@ -46,8 +46,8 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -155,6 +155,10 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+    ),
+    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
 }
 
 # JWT Settings
@@ -183,15 +187,16 @@ SIMPLE_JWT = {
 }
 
 # CORS Configuration
-cors_origins = os.getenv(
-    'CORS_ALLOWED_ORIGINS',
-    "http://localhost:8080,http://localhost:5173,http://localhost:3000,http://127.0.0.1:8080,http://127.0.0.1:5173,http://127.0.0.1:3000"
-)
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(',')]
-
-# For development, allow all origins (remove this in production!)
+# For development, allow all origins
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
+else:
+    # Production - use specific origins from environment
+    cors_origins = os.getenv(
+        'CORS_ALLOWED_ORIGINS',
+        ""
+    )
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -214,4 +219,18 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
-]  
+]
+
+# Disable CSRF for API endpoints
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+]
+
+# Debug CORS settings
+if DEBUG:
+    print("DEBUG MODE: CORS_ALLOW_ALL_ORIGINS =", CORS_ALLOW_ALL_ORIGINS)
+else:
+    print("PRODUCTION MODE: CORS_ALLOWED_ORIGINS =", CORS_ALLOWED_ORIGINS)

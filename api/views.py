@@ -7,6 +7,8 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from .serializers import SignupSerializer, SigninSerializer, ImageSerializer, SimilaritySerializer, FeedbackSerializer
 from rest_framework.parsers import MultiPartParser, FormParser
 from io import BytesIO
@@ -25,6 +27,7 @@ from datetime import datetime, timedelta
 
 from .ml_models import get_classification_model
 
+@method_decorator(csrf_exempt, name='dispatch')
 class SignupView(APIView):
 	permission_classes = [AllowAny]
 	def post(self, request):
@@ -36,6 +39,7 @@ class SignupView(APIView):
 
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class SigninView(APIView):
 	permission_classes = [AllowAny]
 	def post(self, request):
