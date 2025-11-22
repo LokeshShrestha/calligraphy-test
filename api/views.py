@@ -25,7 +25,15 @@ from django.conf import settings
 from django.db.models import Avg, Count, Max, Q
 from datetime import datetime, timedelta
 
-from .ml_models import get_classification_model
+# Lazy import to avoid loading PyTorch during startup
+_classification_model = None
+
+def get_classification_model():
+	global _classification_model
+	if _classification_model is None:
+		from .ml_models import get_classification_model as _get_model
+		_classification_model = _get_model()
+	return _classification_model
 
 @method_decorator(csrf_exempt, name='dispatch')
 class SignupView(APIView):
@@ -571,7 +579,57 @@ class UserStatisticsView(APIView):
 	
 	def get(self, request):
 		try:
+			# Get optional query parameters
+			target_class = request.query_params.get('target_class')
+			days = request.query_params.get('days')
+			start_date = request.query_params.get('start_date')
+			end_date = request.query_params.get('end_date')
+			
+			# Start with base queryset
 			similarities = SimilarityHistory.objects.filter(user=request.user)
+			
+			# Apply filters based on parameters
+			if target_class is not None:
+				try:
+					target_class = int(target_class)
+					similarities = similarities.filter(target_class=target_class)
+				except (ValueError, TypeError):
+					return Response({
+						'success': False,
+						'error': 'Invalid target_class parameter'
+					}, status=status.HTTP_400_BAD_REQUEST)
+			
+			if days:
+				try:
+					days = int(days)
+					cutoff_date = datetime.now() - timedelta(days=days)
+					similarities = similarities.filter(created_at__gte=cutoff_date)
+				except (ValueError, TypeError):
+					return Response({
+						'success': False,
+						'error': 'Invalid days parameter'
+					}, status=status.HTTP_400_BAD_REQUEST)
+			
+			if start_date:
+				try:
+					start = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+					similarities = similarities.filter(created_at__gte=start)
+				except (ValueError, TypeError):
+					return Response({
+						'success': False,
+						'error': 'Invalid start_date parameter (use ISO format)'
+					}, status=status.HTTP_400_BAD_REQUEST)
+			
+			if end_date:
+				try:
+					end = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+					similarities = similarities.filter(created_at__lte=end)
+				except (ValueError, TypeError):
+					return Response({
+						'success': False,
+						'error': 'Invalid end_date parameter (use ISO format)'
+					}, status=status.HTTP_400_BAD_REQUEST)
+			
 			total_count = similarities.count()
 			
 			if total_count == 0:
