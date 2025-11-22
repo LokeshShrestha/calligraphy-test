@@ -179,7 +179,7 @@ def preprocess_image(image_path):
 
 
 class FeedbackView(APIView):
-	permission_classes = [AllowAny]
+	permission_classes = [IsAuthenticated]
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def gemini_api_request(self, image_path, prompt):
@@ -250,7 +250,7 @@ class FeedbackView(APIView):
 		
 		return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 class PredictView(APIView):
-	permission_classes = [AllowAny]
+	permission_classes = [IsAuthenticated]
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def post(self, request):
@@ -310,7 +310,7 @@ class PredictView(APIView):
 
 
 class SimilarityView(APIView):
-	permission_classes = [AllowAny]
+	permission_classes = [IsAuthenticated]
 	parser_classes = [MultiPartParser, FormParser]
 	
 	def _create_comparison_overlay(self, user_image_path, reference_image_path):

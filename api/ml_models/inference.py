@@ -1,16 +1,9 @@
 """
 Inference utilities for Ranjana Script classification and similarity
 """
-import torch
-import torch.nn.functional as F
+# Lazy imports - PyTorch and heavy dependencies loaded on first use
 import numpy as np
 from PIL import Image
-
-from .config import MODELS_DIR, IMAGE_SIZE
-from .models import get_model
-from .data_loader import get_transforms
-from .gradcam import GradCAM
-from .siamese_network import SiameseNetwork
 
 
 class RanjanaInference:
@@ -27,6 +20,12 @@ class RanjanaInference:
             device: Device to run inference on ('cuda' or 'cpu')
             checkpoint_path: Optional custom checkpoint path
         """
+        # Lazy import of heavy dependencies
+        import torch
+        from .config import MODELS_DIR
+        from .models import get_model
+        from .data_loader import get_transforms
+        
         self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
         self.model_name = model_name
         self.transform = get_transforms(augment=False)
@@ -71,6 +70,9 @@ class RanjanaInference:
             top_classes: Array of top k class indices
             top_probs: Array of top k probabilities
         """
+        import torch
+        import torch.nn.functional as F
+        
         image_tensor, _ = self.preprocess_image(image_path)
         image_tensor = image_tensor.to(self.device)
         
@@ -124,6 +126,11 @@ class RanjanaInference:
             similarity_score: Similarity percentage [0, 100]
             distance: Euclidean distance between embeddings
         """
+        import torch
+        import torch.nn.functional as F
+        from .config import MODELS_DIR
+        from .siamese_network import SiameseNetwork
+        
         # Load Siamese model if not already loaded
         if not hasattr(self, 'siamese_model'):
             if siamese_checkpoint is None:
@@ -158,6 +165,9 @@ class RanjanaInference:
         img2_tensor = img2_tensor.to(self.device)
         
         # Get embeddings and compute distance
+        import torch
+        import torch.nn.functional as F
+        
         with torch.no_grad():
             emb1, emb2 = self.siamese_model(img1_tensor, img2_tensor)
             distance = F.pairwise_distance(emb1, emb2).item()
@@ -186,6 +196,10 @@ class RanjanaInference:
                 'save_path': str (if saved)
             }
         """
+        import torch
+        import torch.nn.functional as F
+        from .gradcam import GradCAM
+        
         # Load image
         image = Image.open(image_path).convert('L')
         input_tensor = self.transform(image).unsqueeze(0).to(self.device)
@@ -227,6 +241,10 @@ class RanjanaInference:
         Returns:
             numpy.ndarray: 128-dimensional embedding vector
         """
+        import torch
+        from .config import MODELS_DIR
+        from .siamese_network import SiameseNetwork
+        
         # Load Siamese model if not already loaded
         if not hasattr(self, 'siamese_model'):
             if siamese_checkpoint is None:

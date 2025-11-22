@@ -1,7 +1,6 @@
 """
 Simplified data loader for inference only
 """
-from torchvision import transforms
 from .config import IMAGE_SIZE, MEAN, STD
 
 
@@ -15,6 +14,9 @@ def get_transforms(augment: bool = False):
     Returns:
         Composed transforms
     """
+    # Lazy import to avoid loading torchvision during startup
+    from torchvision import transforms
+    
     # Inference transforms (no augmentation)
     transform = transforms.Compose([
         transforms.Resize(IMAGE_SIZE),

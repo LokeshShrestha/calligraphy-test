@@ -3,7 +3,6 @@ Model loader singleton for Django
 Ensures model is loaded only once and reused across requests
 """
 from pathlib import Path
-from .inference import RanjanaInference
 
 # Global model instance
 _classification_model = None
@@ -19,6 +18,9 @@ def get_classification_model():
     global _classification_model
     
     if _classification_model is None:
+        # Lazy import to avoid loading PyTorch during Django startup
+        from .inference import RanjanaInference
+        
         model_path = Path(__file__).parent / 'weights'
         _classification_model = RanjanaInference(
             model_name='efficientnet_b0',
