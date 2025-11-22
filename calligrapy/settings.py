@@ -187,22 +187,25 @@ SIMPLE_JWT = {
 }
 
 # CORS Configuration
-# CORS Configuration
-# Allow all Vercel preview URLs (includes all subdomains and preview deployments)
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://.*\.vercel\.app$",
-]
-
 # For development, allow all origins
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOWED_ORIGIN_REGEXES = []
+    CORS_ALLOWED_ORIGINS = []
 else:
     # Production - use specific origins from environment
     cors_origins = os.getenv(
         'CORS_ALLOWED_ORIGINS',
-        ""
+        'https://callivision.vercel.app'
     )
     CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
+    
+    # Allow all Vercel preview URLs (includes all subdomains and preview deployments)
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^https://.*\.vercel\.app$",
+    ]
+    
+    CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -227,12 +230,21 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
+CORS_EXPOSE_HEADERS = [
+    'content-type',
+    'authorization',
+]
+
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24 hours
+
 # Disable CSRF for API endpoints
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://localhost:8000',
     'http://127.0.0.1:8000',
+    'https://callivision.vercel.app',
+    'https://ranjanalipi.onrender.com',
 ]
 
 # Debug CORS settings
