@@ -187,6 +187,12 @@ SIMPLE_JWT = {
 }
 
 # CORS Configuration
+# CORS Configuration
+# Allow all Vercel preview URLs (includes all subdomains and preview deployments)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.vercel\.app$",
+]
+
 # For development, allow all origins
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
@@ -230,7 +236,9 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 # Debug CORS settings
+print("CORS_ALLOWED_ORIGIN_REGEXES =", CORS_ALLOWED_ORIGIN_REGEXES)
 if DEBUG:
     print("DEBUG MODE: CORS_ALLOW_ALL_ORIGINS =", CORS_ALLOW_ALL_ORIGINS)
 else:
     print("PRODUCTION MODE: CORS_ALLOWED_ORIGINS =", CORS_ALLOWED_ORIGINS)
+    print("PRODUCTION MODE: CORS_ALLOWED_ORIGIN_REGEXES =", CORS_ALLOWED_ORIGIN_REGEXES)

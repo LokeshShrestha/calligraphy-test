@@ -13,10 +13,11 @@ A Django REST API backend for a mobile calligraphy learning application that rec
 
 ## 🚀 Production Readiness Status
 
-**Current Status: ~75% Production Ready** - Core functionality stable, needs production hardening
+**Current Status: ~80% Production Ready** - Core functionality stable with HuggingFace integration
 
 ### ✅ Production-Ready Components
 - **Core ML Models**: EfficientNet-B0 (99.5% accuracy) and Siamese Network (92.7% accuracy) - fully tested and optimized
+- **HuggingFace Spaces Integration**: ML inference offloaded to HuggingFace Spaces with Gradio API
 - **REST API Architecture**: Well-structured Django REST Framework with proper serialization and validation
 - **Authentication System**: JWT-based authentication fully implemented with token refresh
 - **Database**: PostgreSQL with proper migrations and relationships
@@ -28,17 +29,17 @@ A Django REST API backend for a mobile calligraphy learning application that rec
 - **Deployment Ready**: Procfile and gunicorn configured for Heroku/Render
 
 ### ⚠️ Needs Production Hardening
-1. **Celery Integration** 
-   - Code references Celery in tasks.py but settings.py has NO Celery configuration
-   - Missing: CELERY_BROKER_URL, CELERY_RESULT_BACKEND, celery.py app initialization
-   - README mentions Celery but it's NOT actually configured
-   - **Action Required**: Either implement Celery properly or remove async references
+1. **HuggingFace API Configuration**
+   - ✅ Gradio Client integration implemented
+   - ✅ API endpoints properly configured with api_name
+   - ⚠️ Requires gradio-client package installation in production
+   - ⚠️ HUGGINGFACE_SPACE_URL must be set in environment variables
+   - ⚠️ HuggingFace Space must be running and accessible
 
 2. **Security Enhancements Needed**
    - DEBUG mode enabled by default (set to False in production)
    - SECRET_KEY in settings (should only be in .env)
    - No rate limiting implemented (vulnerable to abuse)
-   - ML endpoints use AllowAny permission (no authentication)
    - No input validation limits (file size, resolution)
    - Missing security headers (X-Frame-Options, CSP, etc.)
 
@@ -56,7 +57,7 @@ A Django REST API backend for a mobile calligraphy learning application that rec
 
 5. **Environment Configuration**
    - .env.example exists but incomplete
-   - Missing Redis configuration (if Celery is actually needed)
+   - Missing HUGGINGFACE_SPACE_URL configuration example
    - No environment-specific settings separation
 
 6. **Documentation Gaps**
@@ -70,61 +71,65 @@ A Django REST API backend for a mobile calligraphy learning application that rec
 Before deploying to production, complete these critical tasks:
 
 ```bash
-# 1. Security
+# 1. HuggingFace Setup
+□ Deploy Gradio app to HuggingFace Spaces
+□ Set HUGGINGFACE_SPACE_URL in .env
+□ Set USE_HUGGINGFACE_API=True in .env
+□ Install gradio-client in production environment
+□ Test HuggingFace API connectivity
+
+# 2. Security
 □ Set DEBUG=False in .env
 □ Generate new SECRET_KEY and store only in .env
 □ Add rate limiting (django-ratelimit)
-□ Enable authentication on ML endpoints
 □ Configure HTTPS/SSL certificates
 □ Set secure cookie settings
 
-# 2. Logging
+# 3. Logging
 □ Configure Django logging to file/service
 □ Add Sentry or similar error tracking
 □ Implement request/response logging
 
-# 3. Performance
+# 4. Performance
 □ Configure database connection pooling
 □ Add caching (Redis/Memcached)
 □ Optimize media storage (S3/CloudFront)
 □ Set up CDN for static files
 
-# 4. Infrastructure
+# 5. Infrastructure
 □ Configure database backups
 □ Set up monitoring (New Relic/DataDog)
 □ Configure auto-scaling rules
 □ Set up load balancer
-
-# 5. Celery (if async needed)
-□ Add Celery configuration to settings.py
-□ Create celery.py in project root
-□ Set up Redis/RabbitMQ broker
-□ Configure celery workers in production
 ```
 
-## � Note: Celery Status
+## 📋 Note: ML Inference Architecture
 
-**IMPORTANT**: The README mentions Celery extensively, but the actual configuration is **INCOMPLETE**:
-- ✅ `api/tasks.py` has Celery tasks defined
-- ❌ `calligrapy/settings.py` has NO Celery configuration
-- ❌ No `celery.py` initialization file
-- ❌ No Redis/broker configuration
+**Current Setup**: The application uses **HuggingFace Spaces** for ML inference:
+- ✅ `api/ml_models/hf_client.py` implements Gradio Client for API calls
+- ✅ `huggingface_space/app.py` contains Gradio interface with models
+- ✅ Confidence values automatically converted from 0-1 to 0-100 range
+- ⚠️ Requires `USE_HUGGINGFACE_API=True` and `HUGGINGFACE_SPACE_URL` in environment
 
-**Current Behavior**: API works synchronously despite task code existing. For production async processing, Celery setup must be completed.
+**Benefits**:
+- No need to load heavy ML models in Django server
+- Reduced memory footprint for main application
+- Scalable inference through HuggingFace infrastructure
+- Easy model updates without redeploying Django app
 
 ## 📋 Quick Reference
 
 | Feature | Endpoint | Model | Status | Auth Required |
 |---------|----------|-------|--------|---------------|
-| **Character Recognition** | `POST /api/predict/` | EfficientNet-B0 (47MB, 99.5%) | ✅ Working | ✅ Required |
-| **Similarity Comparison** | `POST /api/similarity/` | Siamese Network (25MB, 92.7%) | ✅ Working | ✅ Required |
+| **Character Recognition** | `POST /api/predict/` | EfficientNet-B0 via HF (99.5%) | ✅ Working | ✅ Required |
+| **Similarity Comparison** | `POST /api/similarity/` | Siamese Network via HF (92.7%) | ✅ Working | ✅ Required |
 | **AI Feedback** | `POST /api/feedback/` | Gemini 2.5 Flash | ✅ Working | ✅ Required |
 | **User Signup** | `POST /api/signup/` | - | ✅ Working | ❌ None |
 | **User Signin** | `POST /api/signin/` | JWT Auth | ✅ Working | ❌ None |
 | **Change Password** | `POST /api/change-password/` | JWT Auth | ✅ Working | ✅ Required |
 | **Change Username** | `POST /api/change-username/` | JWT Auth | ✅ Working | ✅ Required |
 | **Prediction History** | `GET /api/history/predictions/` | - | ✅ Working | ✅ Required |
-| **Similarity History** | `GET /api/history/similarities/` | ✅ Working | ✅ Required |
+| **Similarity History** | `GET /api/history/similarities/` | - | ✅ Working | ✅ Required |
 | **Delete History Item** | `DELETE /api/history/similarities/<id>/` | - | ✅ Working | ✅ Required |
 | **User Statistics** | `GET /api/statistics/` | - | ✅ Working | ✅ Required |
 
@@ -132,22 +137,23 @@ Before deploying to production, complete these critical tasks:
 
 **Key Features:**
 - ✅ Full user authentication and session management
+- ✅ HuggingFace Spaces integration for ML inference
 - ✅ History tracking with database persistence
 - ✅ AI-powered personalized feedback via Gemini API
 - ✅ Advanced statistics and progress tracking
 - ✅ Image preprocessing and optimization
 - ✅ Model trained on **36 classes (0-35)** using augmented dataset
-- ⚠️ No async task processing (Celery not configured)
+- ✅ Confidence values automatically normalized to 0-100 range
 
 ## 🎯 Overview
 
 This backend supports a mobile app that helps users learn Ranjana script (an ancient Nepali script) by:
-- **Recognizing** handwritten characters using AI (99.5% accuracy, 36 classes)
-- **Comparing** user's handwriting with reference samples (92.7% accuracy)
+- **Recognizing** handwritten characters using AI (99.5% accuracy, 36 classes) via HuggingFace Spaces
+- **Comparing** user's handwriting with reference samples (92.7% accuracy) via HuggingFace Spaces
 - **Providing visual feedback** through three-panel comparison images (reference, user input, and blended overlay)
 - **Authentication & User Management** with JWT-based security
 - **Automatic image preprocessing** for optimal recognition results
-- **History Tracking** of predictions and similarity comparisons (available, currently not saving data)
+- **History Tracking** of predictions and similarity comparisons with full database persistence
 
 ## ✨ Key Capabilities
 
