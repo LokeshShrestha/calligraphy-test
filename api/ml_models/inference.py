@@ -1,9 +1,12 @@
 """
 Inference utilities for Ranjana Script classification and similarity
 """
-# Lazy imports - PyTorch and heavy dependencies loaded on first use
 import numpy as np
 from PIL import Image
+
+# Import PyTorch once at module level (loaded when module is first imported)
+import torch
+import torch.nn.functional as F
 
 
 class RanjanaInference:
@@ -20,8 +23,6 @@ class RanjanaInference:
             device: Device to run inference on ('cuda' or 'cpu')
             checkpoint_path: Optional custom checkpoint path
         """
-        # Lazy import of heavy dependencies
-        import torch
         from .config import MODELS_DIR
         from .models import get_model
         from .data_loader import get_transforms
@@ -84,9 +85,6 @@ class RanjanaInference:
             top_classes: Array of top k class indices
             top_probs: Array of top k probabilities
         """
-        import torch
-        import torch.nn.functional as F
-        
         image_tensor, _ = self.preprocess_image(image_path, skip_preprocessing)
         image_tensor = image_tensor.to(self.device)
         
@@ -142,8 +140,6 @@ class RanjanaInference:
             similarity_score: Similarity percentage [0, 100]
             distance: Euclidean distance between embeddings
         """
-        import torch
-        import torch.nn.functional as F
         from .config import MODELS_DIR
         from .siamese_network import SiameseNetwork
         
@@ -181,9 +177,6 @@ class RanjanaInference:
         img2_tensor = img2_tensor.to(self.device)
         
         # Get embeddings and compute distance
-        import torch
-        import torch.nn.functional as F
-        
         with torch.no_grad():
             emb1, emb2 = self.siamese_model(img1_tensor, img2_tensor)
             distance = F.pairwise_distance(emb1, emb2).item()

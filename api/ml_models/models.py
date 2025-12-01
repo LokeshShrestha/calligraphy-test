@@ -17,11 +17,13 @@ class EfficientNetModel(nn.Module):
     def __init__(self, num_classes: int = NUM_CLASSES, model_name: str = 'efficientnet_b0', pretrained: bool = True):
         super(EfficientNetModel, self).__init__()
         
-        # Load EfficientNet
+        # Load EfficientNet with new weights API (avoids deprecation warning)
         if model_name == 'efficientnet_b0':
-            self.efficientnet = models.efficientnet_b0(pretrained=pretrained)
+            weights = models.EfficientNet_B0_Weights.DEFAULT if pretrained else None
+            self.efficientnet = models.efficientnet_b0(weights=weights)
         elif model_name == 'efficientnet_b1':
-            self.efficientnet = models.efficientnet_b1(pretrained=pretrained)
+            weights = models.EfficientNet_B1_Weights.DEFAULT if pretrained else None
+            self.efficientnet = models.efficientnet_b1(weights=weights)
         else:
             raise ValueError(f"Unknown model: {model_name}")
         
