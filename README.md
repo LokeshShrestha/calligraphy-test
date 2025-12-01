@@ -1,5 +1,7 @@
 # Ranjana Calligraphy Recognition API
 
+View live at: https://callivision.vercel.app/
+
 A Django REST API backend for a mobile calligraphy learning application that recognizes and analyzes Ranjana script characters using deep learning. This API provides character recognition, handwriting similarity comparison, user authentication, and learning progress tracking to help users master Ranjana calligraphy.
 
 ---
